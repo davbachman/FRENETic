@@ -3,6 +3,8 @@ import type { CurveSample, LevelDefinition, SampledCurve } from './types';
 
 const SCREEN_UP = new Vector3(0, 0, 1);
 const FALLBACK_UP = new Vector3(0, 1, 0);
+const MIN_TORSION_CROSS_LENGTH_SQ = 1e-8;
+const LOW_CURVATURE_TORSION_FACTOR = 0.25;
 
 function wrap(index: number, length: number): number {
   return ((index % length) + length) % length;
@@ -17,6 +19,34 @@ function frameNormalFor(tangent: Vector3, previousNormal?: Vector3): Vector3 {
   }
 
   return normal.normalize();
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function stableTorsionFor(
+  level: LevelDefinition,
+  numerator: number,
+  crossLengthSq: number,
+  curvature: number,
+): number {
+  const [minTorsion, maxTorsion] = level.acceptableTorsion;
+  const lowCurvatureLimit = Math.max(
+    level.acceptableCurvature[0] * LOW_CURVATURE_TORSION_FACTOR,
+    1e-6,
+  );
+
+  if (crossLengthSq < MIN_TORSION_CROSS_LENGTH_SQ || curvature < lowCurvatureLimit) {
+    return 0;
+  }
+
+  const rawTorsion = numerator / crossLengthSq;
+  if (!Number.isFinite(rawTorsion)) {
+    return 0;
+  }
+
+  return clamp(rawTorsion, minTorsion, maxTorsion);
 }
 
 export function sampleLevelCurve(level: LevelDefinition): SampledCurve {
@@ -68,8 +98,9 @@ export function sampleLevelCurve(level: LevelDefinition): SampledCurve {
       .sub(positions[prev2])
       .multiplyScalar(1 / (2 * dt * dt * dt));
     const cross = r1.clone().cross(r2);
+    const crossLengthSq = cross.lengthSq();
     const curvature = cross.length() / Math.max(r1.length() ** 3, 1e-6);
-    const torsion = cross.lengthSq() < 1e-8 ? 0 : cross.dot(r3) / cross.lengthSq();
+    const torsion = stableTorsionFor(level, cross.dot(r3), crossLengthSq, curvature);
 
     return {
       index,

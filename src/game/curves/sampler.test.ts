@@ -38,6 +38,42 @@ describe('sampleLevelCurve', () => {
     }
   });
 
+  it('keeps authored torsion finite and compatible with level metadata', () => {
+    for (const level of authoredLevels) {
+      const sampled = sampleLevelCurve(level);
+      const maxExpectedTorsion =
+        Math.max(Math.abs(level.acceptableTorsion[0]), Math.abs(level.acceptableTorsion[1])) *
+        1.25;
+
+      for (const sample of sampled.samples) {
+        expect(Number.isFinite(sample.torsion)).toBe(true);
+      }
+
+      const maxTorsion = Math.max(...sampled.samples.map((sample) => Math.abs(sample.torsion)));
+      expect(maxTorsion).toBeLessThanOrEqual(maxExpectedTorsion);
+    }
+  });
+
+  it('keeps arc lengths monotonic and includes the closing segment', () => {
+    for (const level of authoredLevels) {
+      const sampled = sampleLevelCurve(level);
+
+      for (let index = 1; index < sampled.samples.length; index += 1) {
+        expect(sampled.samples[index].arcLength).toBeGreaterThan(
+          sampled.samples[index - 1].arcLength,
+        );
+      }
+
+      const closingSegment = sampled.samples
+        .at(-1)!
+        .position.distanceTo(sampled.samples[0].position);
+      expect(sampled.totalLength).toBeCloseTo(
+        sampled.samples.at(-1)!.arcLength + closingSegment,
+        6,
+      );
+    }
+  });
+
   it('builds unit tangents and frames orthogonal to tangents', () => {
     const sampled = sampleLevelCurve(authoredLevels[0]);
 
