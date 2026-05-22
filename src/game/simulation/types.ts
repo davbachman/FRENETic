@@ -1,4 +1,4 @@
-import { Vector3 } from 'three';
+import type { Vector3 } from 'three';
 import type { CurveSample, SampledCurve } from '../curves/types';
 
 export interface Vec2 {

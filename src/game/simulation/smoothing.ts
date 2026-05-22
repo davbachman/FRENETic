@@ -14,9 +14,13 @@ export function smoothSteering(
 }
 
 export function clampSteering(input: Vec2): Vec2 {
+  if (!Number.isFinite(input.x) || !Number.isFinite(input.y)) {
+    return { x: 0, y: 0 };
+  }
+
   const length = Math.hypot(input.x, input.y);
   if (length <= 1) {
-    return input;
+    return { x: input.x, y: input.y };
   }
 
   return {
