@@ -9,6 +9,11 @@ export interface GameState {
   level: LevelDefinition;
 }
 
+function normalizeLevelIndex(index: number, levelCount: number): number {
+  const wholeIndex = Number.isFinite(index) ? Math.trunc(index) : 0;
+  return ((wholeIndex % levelCount) + levelCount) % levelCount;
+}
+
 export function createGameState(levels: LevelDefinition[]): GameState {
   if (levels.length === 0) {
     throw new Error('FRENETic requires at least one level.');
@@ -27,12 +32,14 @@ export function setMode(state: GameState, mode: GameMode): void {
 }
 
 export function restartLevel(state: GameState): void {
+  state.levelIndex = normalizeLevelIndex(state.levelIndex, state.levels.length);
   state.level = state.levels[state.levelIndex];
   state.mode = 'playing';
 }
 
 export function nextLevel(state: GameState): void {
-  state.levelIndex = (state.levelIndex + 1) % state.levels.length;
+  const currentIndex = normalizeLevelIndex(state.levelIndex, state.levels.length);
+  state.levelIndex = normalizeLevelIndex(currentIndex + 1, state.levels.length);
   state.level = state.levels[state.levelIndex];
   state.mode = 'playing';
 }

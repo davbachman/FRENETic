@@ -18,7 +18,32 @@ describe('game state', () => {
     state.levelIndex = 2;
     restartLevel(state);
     expect(state.levelIndex).toBe(2);
+    expect(state.level.id).toBe('trefoil-knot');
     expect(state.mode).toBe('playing');
+  });
+
+  it('normalizes invalid level index when restarting', () => {
+    const state = createGameState(authoredLevels);
+
+    state.levelIndex = -1;
+    restartLevel(state);
+    expect(state.levelIndex).toBe(authoredLevels.length - 1);
+    expect(state.level.id).toBe('cinquefoil-knot');
+
+    state.levelIndex = -2;
+    restartLevel(state);
+    expect(state.levelIndex).toBe(authoredLevels.length - 2);
+    expect(state.level.id).toBe('trefoil-knot');
+
+    state.levelIndex = 99;
+    restartLevel(state);
+    expect(state.levelIndex).toBe(3);
+    expect(state.level.id).toBe('cinquefoil-knot');
+
+    state.levelIndex = 1.8;
+    restartLevel(state);
+    expect(state.levelIndex).toBe(1);
+    expect(state.level.id).toBe('lifted-wave');
   });
 
   it('advances to the next level and wraps at the end', () => {
@@ -29,6 +54,30 @@ describe('game state', () => {
     state.levelIndex = authoredLevels.length - 1;
     nextLevel(state);
     expect(state.level.id).toBe('planar-wave');
+  });
+
+  it('normalizes invalid level index before advancing', () => {
+    const state = createGameState(authoredLevels);
+
+    state.levelIndex = -1;
+    nextLevel(state);
+    expect(state.levelIndex).toBe(0);
+    expect(state.level.id).toBe('planar-wave');
+
+    state.levelIndex = -2;
+    nextLevel(state);
+    expect(state.levelIndex).toBe(authoredLevels.length - 1);
+    expect(state.level.id).toBe('cinquefoil-knot');
+
+    state.levelIndex = 99;
+    nextLevel(state);
+    expect(state.levelIndex).toBe(0);
+    expect(state.level.id).toBe('planar-wave');
+
+    state.levelIndex = 1.8;
+    nextLevel(state);
+    expect(state.levelIndex).toBe(2);
+    expect(state.level.id).toBe('trefoil-knot');
   });
 
   it('marks level complete near the end of the loop', () => {
@@ -42,6 +91,13 @@ describe('game state', () => {
     const state = createGameState(authoredLevels);
     setMode(state, 'playing');
     updateProgressMode(state, 0.2, 0);
+    expect(state.mode).toBe('failed');
+  });
+
+  it('prioritizes failure over completion when health is depleted near loop end', () => {
+    const state = createGameState(authoredLevels);
+    setMode(state, 'playing');
+    updateProgressMode(state, 0.995, 0);
     expect(state.mode).toBe('failed');
   });
 
