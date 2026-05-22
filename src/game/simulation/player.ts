@@ -115,6 +115,10 @@ export function updateSimulation(
 
   updateCollision(state.player, state.sampled, dt, config);
 
+  for (const point of state.player.steeringHistory) {
+    point.age += dt;
+  }
+
   state.player.steeringHistory.unshift({
     age: 0,
     raw: { ...clamped },
@@ -122,10 +126,6 @@ export function updateSimulation(
     curvature: state.player.currentCurvature,
     torsion: state.player.currentTorsion,
   });
-
-  for (const point of state.player.steeringHistory) {
-    point.age += dt;
-  }
 
   state.player.steeringHistory = state.player.steeringHistory.filter(
     (point) => point.age <= config.maxHistorySeconds,

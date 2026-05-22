@@ -54,6 +54,7 @@ describe('player simulation', () => {
     }
 
     expect(state.player.steeringHistory.length).toBeGreaterThan(10);
+    expect(state.player.steeringHistory[0].age).toBe(0);
     expect(Math.max(...state.player.steeringHistory.map((point) => point.age))).toBeLessThanOrEqual(
       config.maxHistorySeconds,
     );
@@ -69,6 +70,26 @@ describe('player simulation', () => {
     expect(state.player.warning).toBeGreaterThan(0);
     expect(state.player.health).toBeLessThan(1);
     expect(state.player.damageFlash).toBeGreaterThan(0);
+  });
+
+  it('ramps warning smoothly from threshold to tube wall', () => {
+    const sampled = sampleLevelCurve(authoredLevels[0]);
+    const state = createSimulationState(sampled);
+    const center = sampled.samples[0];
+    const tubeRadius = sampled.level.tubeRadius;
+    const warningDistance = tubeRadius * config.warningDistanceRatio;
+
+    const setDistanceAndUpdate = (distance: number): number => {
+      state.player.position.copy(center.position).add(center.normal.clone().multiplyScalar(distance));
+      updateSimulation(state, { x: 0, y: 0 }, 0, config);
+      return state.player.warning;
+    };
+
+    expect(setDistanceAndUpdate(warningDistance - 0.01)).toBe(0);
+    expect(setDistanceAndUpdate(warningDistance)).toBe(0);
+    expect(setDistanceAndUpdate((warningDistance + tubeRadius) / 2)).toBeCloseTo(0.5, 1);
+    expect(setDistanceAndUpdate(tubeRadius)).toBeCloseTo(1);
+    expect(setDistanceAndUpdate(tubeRadius * 1.2)).toBeCloseTo(1);
   });
 
   it('keeps positive torsion magnitude meaningful for sub-unit steering turns', () => {

@@ -2,6 +2,10 @@ import type { SampledCurve } from '../curves/types';
 import { findNearestSample, progressRatioForSample } from '../curves/nearest';
 import type { PlayerState, SimulationConfig } from './types';
 
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
 function unwrappedProgressFor(
   player: PlayerState,
   sampled: SampledCurve,
@@ -37,9 +41,9 @@ export function updateCollision(
   player.nearestSample = nearest.sample;
   player.distanceFromCenterline = nearest.distance;
   player.progress = unwrappedProgressFor(player, sampled, nearest.index, previousIndex);
-  player.warning = nearest.distance >= warningDistance
-    ? Math.min(1, nearest.distance / sampled.level.tubeRadius)
-    : 0;
+  player.warning = clamp01(
+    (nearest.distance - warningDistance) / Math.max(sampled.level.tubeRadius - warningDistance, 1e-6),
+  );
 
   if (nearest.distance > sampled.level.tubeRadius) {
     const overage = nearest.distance / sampled.level.tubeRadius - 1;
