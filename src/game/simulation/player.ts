@@ -4,6 +4,14 @@ import { clampSteering, smoothSteering } from './smoothing';
 import { updateCollision } from './collision';
 import type { SimulationConfig, SimulationState, Vec2 } from './types';
 
+const SCREEN_UP = new Vector3(0, 0, 1);
+const FALLBACK_UP = new Vector3(0, 1, 0);
+const FALLBACK_RIGHT = new Vector3(1, 0, 0);
+
+function clampUnit(value: number): number {
+  return Math.max(-1, Math.min(1, value));
+}
+
 function signedSteeringTurn(previous: Vec2, current: Vec2, dt: number): number {
   const previousLength = Math.hypot(previous.x, previous.y);
   const currentLength = Math.hypot(current.x, current.y);
@@ -12,17 +20,31 @@ function signedSteeringTurn(previous: Vec2, current: Vec2, dt: number): number {
     return 0;
   }
 
-  const dot = (previous.x * current.x + previous.y * current.y) / (previousLength * currentLength);
-  const cross = previous.x * current.y - previous.y * current.x;
-  const angle = Math.atan2(cross, Math.max(-1, Math.min(1, dot)));
+  const lengthProduct = previousLength * currentLength;
+  const normalizedDot = clampUnit((previous.x * current.x + previous.y * current.y) / lengthProduct);
+  const normalizedCross = clampUnit((previous.x * current.y - previous.y * current.x) / lengthProduct);
+  const angle = Math.atan2(normalizedCross, normalizedDot);
   return angle / Math.max(dt, 1e-6);
 }
 
+function fallbackNormalFor(tangent: Vector3): Vector3 {
+  const source = Math.abs(tangent.dot(SCREEN_UP)) < 0.96
+    ? SCREEN_UP
+    : Math.abs(tangent.dot(FALLBACK_UP)) < 0.96
+      ? FALLBACK_UP
+      : FALLBACK_RIGHT;
+
+  return source.clone().sub(tangent.clone().multiplyScalar(source.dot(tangent))).normalize();
+}
+
 function rebuildFrame(state: SimulationState): void {
-  const screenUp = new Vector3(0, 0, 1);
-  const fallback = new Vector3(0, 1, 0);
-  const source = Math.abs(state.player.tangent.dot(screenUp)) > 0.96 ? fallback : screenUp;
-  state.player.normal.copy(source.sub(state.player.tangent.clone().multiplyScalar(source.dot(state.player.tangent))).normalize());
+  const transportedNormal = state.player.normal
+    .clone()
+    .sub(state.player.tangent.clone().multiplyScalar(state.player.normal.dot(state.player.tangent)));
+
+  state.player.normal.copy(
+    transportedNormal.lengthSq() > 1e-8 ? transportedNormal.normalize() : fallbackNormalFor(state.player.tangent),
+  );
   state.player.binormal.copy(state.player.tangent.clone().cross(state.player.normal).normalize());
 }
 
@@ -67,15 +89,15 @@ export function updateSimulation(
     config.steeringResponseSeconds,
   );
 
-  state.player.rawSteering = clamped;
-  state.player.smoothedSteering = smoothed;
+  state.player.rawSteering = { ...clamped };
+  state.player.smoothedSteering = { ...smoothed };
   state.player.currentCurvature = Math.hypot(smoothed.x, smoothed.y) * config.maxCurvature;
   state.player.currentTorsion = signedSteeringTurn(
     state.player.previousCurvatureDirection,
     smoothed,
     dt,
   );
-  state.player.previousCurvatureDirection = smoothed;
+  state.player.previousCurvatureDirection = { ...smoothed };
 
   const curvatureDirection = state.player.binormal
     .clone()
@@ -95,8 +117,8 @@ export function updateSimulation(
 
   state.player.steeringHistory.unshift({
     age: 0,
-    raw: clamped,
-    smoothed,
+    raw: { ...clamped },
+    smoothed: { ...smoothed },
     curvature: state.player.currentCurvature,
     torsion: state.player.currentTorsion,
   });

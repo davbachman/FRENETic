@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Vector3 } from 'three';
 import { authoredLevels } from '../curves/levels';
 import { sampleLevelCurve } from '../curves/sampler';
 import { createSimulationState, updateSimulation } from './player';
@@ -10,6 +11,11 @@ const config = {
   recoveryPerSecond: 0.12,
   damagePerSecond: 0.45,
   warningDistanceRatio: 0.72,
+};
+
+const immediateSteeringConfig = {
+  ...config,
+  steeringResponseSeconds: 1e-6,
 };
 
 describe('player simulation', () => {
@@ -63,5 +69,92 @@ describe('player simulation', () => {
     expect(state.player.warning).toBeGreaterThan(0);
     expect(state.player.health).toBeLessThan(1);
     expect(state.player.damageFlash).toBeGreaterThan(0);
+  });
+
+  it('keeps positive torsion magnitude meaningful for sub-unit steering turns', () => {
+    const sampled = sampleLevelCurve(authoredLevels[0]);
+    const state = createSimulationState(sampled);
+    const turnAngle = 0.35;
+    const previous = { x: 0.2, y: 0 };
+    const current = { x: 0.2 * Math.cos(turnAngle), y: 0.2 * Math.sin(turnAngle) };
+    const dt = 0.25;
+
+    state.player.previousCurvatureDirection = { ...previous };
+    state.player.smoothedSteering = { ...previous };
+
+    updateSimulation(state, current, dt, immediateSteeringConfig);
+
+    expect(state.player.currentTorsion).toBeCloseTo(turnAngle / dt, 5);
+  });
+
+  it('keeps negative torsion magnitude meaningful for sub-unit steering turns', () => {
+    const sampled = sampleLevelCurve(authoredLevels[0]);
+    const state = createSimulationState(sampled);
+    const turnAngle = -0.35;
+    const previous = { x: 0.2, y: 0 };
+    const current = { x: 0.2 * Math.cos(turnAngle), y: 0.2 * Math.sin(turnAngle) };
+    const dt = 0.25;
+
+    state.player.previousCurvatureDirection = { ...previous };
+    state.player.smoothedSteering = { ...previous };
+
+    updateSimulation(state, current, dt, immediateSteeringConfig);
+
+    expect(state.player.currentTorsion).toBeCloseTo(turnAngle / dt, 5);
+  });
+
+  it('unwraps progress across the centerline seam without regression', () => {
+    const sampled = sampleLevelCurve(authoredLevels[0]);
+    const state = createSimulationState(sampled);
+    const lastIndex = sampled.samples.length - 1;
+    const beforeLast = sampled.samples[lastIndex - 1];
+    const last = sampled.samples[lastIndex];
+    const first = sampled.samples[0];
+
+    state.player.nearestSample = beforeLast;
+    state.player.progress = beforeLast.arcLength / sampled.totalLength;
+
+    state.player.position.copy(last.position);
+    updateSimulation(state, { x: 0, y: 0 }, 0, config);
+    const progressBeforeWrap = state.player.progress;
+
+    state.player.position.copy(first.position);
+    updateSimulation(state, { x: 0, y: 0 }, 0, config);
+
+    expect(progressBeforeWrap).toBeGreaterThan(0.99);
+    expect(state.player.progress).toBeGreaterThanOrEqual(1);
+    expect(state.player.progress).toBeGreaterThanOrEqual(progressBeforeWrap);
+  });
+
+  it('preserves frame normal continuity near vertical tangents', () => {
+    const sampled = sampleLevelCurve(authoredLevels[0]);
+    const state = createSimulationState(sampled);
+    const tangent = new Vector3(0.2, 0, Math.sqrt(1 - 0.2 ** 2)).normalize();
+    const previousNormal = new Vector3(tangent.z, 0, -tangent.x).normalize();
+
+    state.player.tangent.copy(tangent);
+    state.player.normal.copy(previousNormal);
+    state.player.binormal.copy(state.player.tangent.clone().cross(state.player.normal).normalize());
+
+    updateSimulation(state, { x: 0, y: 0.05 }, 1 / 60, immediateSteeringConfig);
+
+    expect(state.player.normal.angleTo(previousNormal)).toBeLessThan(0.2);
+    expect(Math.abs(state.player.normal.dot(state.player.tangent))).toBeLessThan(1e-6);
+    expect(Math.abs(state.player.binormal.dot(state.player.tangent))).toBeLessThan(1e-6);
+  });
+
+  it('stores independent steering snapshots', () => {
+    const sampled = sampleLevelCurve(authoredLevels[0]);
+    const state = createSimulationState(sampled);
+
+    updateSimulation(state, { x: 0.4, y: -0.2 }, 1 / 60, config);
+
+    const latest = state.player.steeringHistory[0];
+    expect(latest.raw).toEqual(state.player.rawSteering);
+    expect(latest.raw).not.toBe(state.player.rawSteering);
+    expect(latest.smoothed).toEqual(state.player.smoothedSteering);
+    expect(latest.smoothed).not.toBe(state.player.smoothedSteering);
+    expect(state.player.previousCurvatureDirection).toEqual(state.player.smoothedSteering);
+    expect(state.player.previousCurvatureDirection).not.toBe(state.player.smoothedSteering);
   });
 });
