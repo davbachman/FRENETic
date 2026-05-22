@@ -18,13 +18,13 @@ export function getRadarRect(width: number, height: number): Rect {
   };
 }
 
-export function normalizePointerToTrackpad(clientX: number, clientY: number, rect: Rect): Vec2 {
+export function normalizePointerToTrackpad(localX: number, localY: number, rect: Rect): Vec2 {
   const centerX = rect.x + rect.width / 2;
   const centerY = rect.y + rect.height / 2;
   const radius = rect.width / 2;
   const raw = {
-    x: (clientX - centerX) / radius,
-    y: (centerY - clientY) / radius,
+    x: (localX - centerX) / radius,
+    y: (centerY - localY) / radius,
   };
   const length = Math.hypot(raw.x, raw.y);
 
@@ -48,18 +48,22 @@ export class PointerTrackpad {
     canvas.addEventListener('pointerup', this.onPointerUp);
     canvas.addEventListener('pointercancel', this.onPointerUp);
     canvas.addEventListener('pointerleave', this.onPointerUp);
+    canvas.addEventListener('lostpointercapture', this.onLostPointerCapture);
   }
 
   getSteering(): Vec2 {
-    return this.steering;
+    return { ...this.steering };
   }
 
   destroy(): void {
+    this.releaseActivePointerCapture();
+    this.resetActivePointer();
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerup', this.onPointerUp);
     this.canvas.removeEventListener('pointercancel', this.onPointerUp);
     this.canvas.removeEventListener('pointerleave', this.onPointerUp);
+    this.canvas.removeEventListener('lostpointercapture', this.onLostPointerCapture);
   }
 
   private canvasRect(): DOMRect {
@@ -80,7 +84,47 @@ export class PointerTrackpad {
     );
   }
 
+  private setCanvasPointerCapture(pointerId: number): void {
+    const setPointerCapture = this.canvas.setPointerCapture;
+
+    if (typeof setPointerCapture === 'function') {
+      setPointerCapture.call(this.canvas, pointerId);
+    }
+  }
+
+  private releasePointerCapture(pointerId: number): void {
+    const releasePointerCapture = this.canvas.releasePointerCapture;
+
+    if (typeof releasePointerCapture !== 'function') {
+      return;
+    }
+
+    const hasPointerCapture = this.canvas.hasPointerCapture;
+    if (typeof hasPointerCapture === 'function' && !hasPointerCapture.call(this.canvas, pointerId)) {
+      return;
+    }
+
+    releasePointerCapture.call(this.canvas, pointerId);
+  }
+
+  private releaseActivePointerCapture(): void {
+    if (this.activePointerId === null) {
+      return;
+    }
+
+    this.releasePointerCapture(this.activePointerId);
+  }
+
+  private resetActivePointer(): void {
+    this.activePointerId = null;
+    this.steering = { x: 0, y: 0 };
+  }
+
   private onPointerDown = (event: PointerEvent): void => {
+    if (this.activePointerId !== null) {
+      return;
+    }
+
     const canvasRect = this.canvasRect();
     const radar = this.radarRect();
     const localX = event.clientX - canvasRect.left;
@@ -96,7 +140,7 @@ export class PointerTrackpad {
     }
 
     this.activePointerId = event.pointerId;
-    this.canvas.setPointerCapture(event.pointerId);
+    this.setCanvasPointerCapture(event.pointerId);
     this.updateFromEvent(event);
   };
 
@@ -113,7 +157,15 @@ export class PointerTrackpad {
       return;
     }
 
-    this.activePointerId = null;
-    this.steering = { x: 0, y: 0 };
+    this.releasePointerCapture(event.pointerId);
+    this.resetActivePointer();
+  };
+
+  private onLostPointerCapture = (event: PointerEvent): void => {
+    if (this.activePointerId !== event.pointerId) {
+      return;
+    }
+
+    this.resetActivePointer();
   };
 }
