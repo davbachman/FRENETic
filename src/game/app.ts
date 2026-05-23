@@ -47,6 +47,10 @@ export class FreneticApp {
   }
 
   start(): void {
+    if (this.running) {
+      return;
+    }
+
     this.running = true;
     this.lastTime = typeof performance === 'undefined' ? 0 : performance.now();
     if (typeof requestAnimationFrame !== 'undefined') {
@@ -69,10 +73,12 @@ export class FreneticApp {
   }
 
   advanceTime(ms: number): void {
-    const steps = Math.max(1, Math.round(ms / (FIXED_STEP * 1000)));
-    for (let i = 0; i < steps; i += 1) {
-      this.step(FIXED_STEP);
+    if (!Number.isFinite(ms) || ms <= 0) {
+      return;
     }
+
+    this.accumulator += ms / 1000;
+    this.drainAccumulator();
     this.renderer.render(this.game, this.simulation);
   }
 
@@ -102,6 +108,13 @@ export class FreneticApp {
     }
   }
 
+  private drainAccumulator(): void {
+    while (this.accumulator >= FIXED_STEP) {
+      this.step(FIXED_STEP);
+      this.accumulator -= FIXED_STEP;
+    }
+  }
+
   private frame = (time: number): void => {
     if (!this.running) {
       return;
@@ -110,11 +123,7 @@ export class FreneticApp {
     const dt = Math.min(0.1, (time - this.lastTime) / 1000);
     this.lastTime = time;
     this.accumulator += dt;
-
-    while (this.accumulator >= FIXED_STEP) {
-      this.step(FIXED_STEP);
-      this.accumulator -= FIXED_STEP;
-    }
+    this.drainAccumulator();
 
     this.renderer.render(this.game, this.simulation);
     requestAnimationFrame(this.frame);
