@@ -22,3 +22,10 @@ Task 11 notes:
 - Added a Starfield points shell to the scene that follows the player/camera, plus fullscreen-aware F/Escape keyboard handling.
 - Added focused tests for Starfield geometry/material/disposal and fullscreen/Escape keyboard behavior.
 - Verification: targeted Starfield/app tests, full Vitest suite, typecheck, and production build pass. Playwright screenshots written under /private/tmp/frenetic-task11-start and /private/tmp/frenetic-task11-playing; start shows tunnel rings, HUD, and stars, while playing shows the expected carry-forward no-steering tunnel drift with HUD/starfield still visible.
+
+Verification:
+- npm run test:run passed.
+- npm run typecheck passed.
+- npm run build passed.
+- Web-game steering check ran at http://127.0.0.1:5173/ with screenshots in output/web-game/steer-right and no console error artifact. It rendered the minimap, radar, blue curvature meter, and green torsion meter, and render_game_to_text() reported 91 steering trace points with smoothed steering changed from neutral. The known playing-mode drift caused the final state to be mode "failed" with the main tunnel out of view.
+- Web-game level cycling check ran at http://127.0.0.1:5173/ with screenshots in output/web-game/level-cycle and no console error artifact. The app still rendered HUD panels and a valid authored level state, but the develop-web-game client did not transmit the requested "n" inputs because its button map currently supports only up/down/left/right/enter/space/a/b, so this run did not prove authored level cycling.
