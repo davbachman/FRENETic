@@ -50,8 +50,6 @@ interface RadarVectors {
   red: RadarVector;
 }
 
-const PANEL_FILL = 'rgba(2, 10, 18, 0.64)';
-const PANEL_STROKE = 'rgba(54, 243, 255, 0.62)';
 const GRID_STROKE = 'rgba(54, 243, 255, 0.16)';
 const TEXT = 'rgba(218, 252, 255, 0.92)';
 const TEXT_DIM = 'rgba(180, 232, 238, 0.64)';
@@ -63,28 +61,6 @@ function clamp01(value: number): number {
 
 function finiteOrZero(value: number): number {
   return Number.isFinite(value) ? value : 0;
-}
-
-function drawRoundedRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number,
-): void {
-  const r = Math.min(radius, width / 2, height / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + width - r, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
-  ctx.lineTo(x + width, y + height - r);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
-  ctx.lineTo(x + r, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
 }
 
 export function calculateMeterGeometry(
@@ -133,6 +109,26 @@ export function calculateMeterTrack(rect: Rect): Rect {
 
 export function calculateRadarHudRect(width: number, height: number): Rect {
   return getRadarRect(width, height);
+}
+
+export function calculateLowerConsoleRail(layout: HudLayout, width: number, height: number): Rect {
+  const railHeight = Math.max(18, Math.min(38, height * 0.035));
+  const x = layout.minimap.x + layout.minimap.width * 0.55;
+  const right = layout.radar.x + layout.radar.width * 0.45;
+  const y = Math.min(
+    height - railHeight - 8,
+    Math.max(
+      layout.minimap.y + layout.minimap.height - railHeight,
+      layout.radar.y + layout.radar.height - railHeight,
+    ),
+  );
+
+  return {
+    x,
+    y,
+    width: Math.max(0, right - x),
+    height: railHeight,
+  };
 }
 
 export function calculateResponsiveHudLayout(width: number, height: number): HudLayout {
@@ -283,12 +279,14 @@ export class HudOverlay {
   draw(game: GameState, simulation: SimulationState): void {
     const width = this.canvas.width;
     const height = this.canvas.height;
+    const layout = calculateResponsiveHudLayout(width, height);
     this.ctx.clearRect(0, 0, width, height);
 
-    this.drawMeters(game, simulation, width);
-    this.drawMinimap(simulation, width, height);
-    this.drawRadar(simulation, width, height);
-    this.drawStatus(game, simulation, width, height);
+    this.drawLowerConsole(layout, width, height);
+    this.drawMeters(game, simulation, layout);
+    this.drawMinimap(simulation, layout);
+    this.drawRadar(simulation, layout);
+    this.drawStatus(game, simulation, width, height, layout);
     this.texture.needsUpdate = true;
   }
 
@@ -334,22 +332,7 @@ export class HudOverlay {
     ctx.restore();
   }
 
-  private drawPanel(rect: Rect): void {
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.shadowColor = hudColors.cyan;
-    ctx.shadowBlur = 12;
-    drawRoundedRect(ctx, rect.x, rect.y, rect.width, rect.height, 8);
-    ctx.fillStyle = PANEL_FILL;
-    ctx.fill();
-    ctx.strokeStyle = PANEL_STROKE;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  private drawMeters(game: GameState, simulation: SimulationState, width: number): void {
-    const layout = calculateResponsiveHudLayout(width, this.canvas.height);
+  private drawMeters(game: GameState, simulation: SimulationState, layout: HudLayout): void {
     const curvatureMax = Math.max(
       game.level.acceptableCurvature[1] * 1.35,
       simulation.player.currentCurvature,
@@ -464,8 +447,34 @@ export class HudOverlay {
     ctx.restore();
   }
 
-  private drawMinimap(simulation: SimulationState, width: number, height: number): void {
-    const rect = calculateResponsiveHudLayout(width, height).minimap;
+  private drawLowerConsole(layout: HudLayout, width: number, height: number): void {
+    const ctx = this.ctx;
+    const rail = calculateLowerConsoleRail(layout, width, height);
+    if (rail.width <= 0) {
+      return;
+    }
+
+    ctx.save();
+    ctx.shadowColor = hudColors.magenta;
+    ctx.shadowBlur = 14;
+    ctx.strokeStyle = hudColors.magenta;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.58;
+    ctx.beginPath();
+    ctx.moveTo(rail.x, rail.y + rail.height * 0.35);
+    ctx.lineTo(rail.x + rail.width, rail.y + rail.height * 0.35);
+    ctx.stroke();
+    ctx.strokeStyle = hudColors.cyan;
+    ctx.globalAlpha = 0.42;
+    ctx.beginPath();
+    ctx.moveTo(rail.x + 18, rail.y + rail.height * 0.65);
+    ctx.lineTo(rail.x + rail.width - 18, rail.y + rail.height * 0.65);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawMinimap(simulation: SimulationState, layout: HudLayout): void {
+    const rect = layout.minimap;
     const projection = calculateMinimapProjection(
       simulation.sampled.samples,
       simulation.player.nearestSample,
@@ -473,8 +482,14 @@ export class HudOverlay {
     );
     const ctx = this.ctx;
 
-    this.drawPanel(rect);
+    this.drawAngularPanel(rect, hudColors.cyan, 0.78);
     ctx.save();
+    ctx.strokeStyle = GRID_STROKE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(rect.x + rect.width / 2, rect.y + rect.height / 2, rect.width * 0.39, 0, TAU);
+    ctx.stroke();
+
     ctx.beginPath();
     projection.points.forEach((point, index) => {
       if (index === 0) {
@@ -504,14 +519,14 @@ export class HudOverlay {
     ctx.restore();
   }
 
-  private drawRadar(simulation: SimulationState, width: number, height: number): void {
-    const rect = calculateResponsiveHudLayout(width, height).radar;
+  private drawRadar(simulation: SimulationState, layout: HudLayout): void {
+    const rect = layout.radar;
     const ctx = this.ctx;
     const cx = rect.x + rect.width / 2;
     const cy = rect.y + rect.height / 2;
     const radius = rect.width / 2 - 18;
 
-    this.drawPanel(rect);
+    this.drawAngularPanel(rect, hudColors.cyan, 0.78);
     ctx.save();
     ctx.strokeStyle = GRID_STROKE;
     ctx.lineWidth = 1;
@@ -618,9 +633,15 @@ export class HudOverlay {
     ctx.restore();
   }
 
-  private drawStatus(game: GameState, simulation: SimulationState, width: number, height: number): void {
+  private drawStatus(
+    game: GameState,
+    simulation: SimulationState,
+    width: number,
+    height: number,
+    layout: HudLayout,
+  ): void {
     const ctx = this.ctx;
-    const statusY = calculateStatusTextY(width, calculateResponsiveHudLayout(width, height));
+    const statusY = calculateStatusTextY(width, layout);
     ctx.save();
     ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.fillStyle = TEXT;

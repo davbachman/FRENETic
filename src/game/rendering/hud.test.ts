@@ -5,6 +5,7 @@ import { getRadarRect } from '../input/pointerTrackpad';
 import {
   calculateMeterGeometry,
   calculateMeterTrack,
+  calculateLowerConsoleRail,
   calculateMinimapProjection,
   calculateRadarVectors,
   calculateRadarHudRect,
@@ -75,6 +76,17 @@ describe('HUD overlay helpers', () => {
 
   it('uses the same radar rectangle as pointer input for HUD drawing', () => {
     expect(calculateRadarHudRect(1000, 700)).toEqual(getRadarRect(1000, 700));
+  });
+
+  it('connects bottom corner pods with a lower console rail that stays below core instruments', () => {
+    const layout = calculateResponsiveHudLayout(1280, 800);
+    const rail = calculateLowerConsoleRail(layout, 1280, 800);
+
+    expect(rail.x).toBeGreaterThan(layout.minimap.x);
+    expect(rail.x + rail.width).toBeLessThan(layout.radar.x + layout.radar.width);
+    expect(rail.width).toBeGreaterThan(300);
+    expect(rail.y).toBeGreaterThanOrEqual(layout.minimap.y + layout.minimap.height - rail.height);
+    expect(rail.y + rail.height).toBeLessThanOrEqual(800 - 8);
   });
 
   it('keeps HUD panels from overlapping on narrow mobile viewports', () => {
