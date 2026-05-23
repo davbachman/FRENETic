@@ -191,6 +191,27 @@ describe('FreneticApp', () => {
     expect(scheduledFrames).toHaveLength(1);
   });
 
+  it('lets deterministic advanceTime take over from the live animation loop', () => {
+    const scheduledFrames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      scheduledFrames.push(callback);
+      return scheduledFrames.length;
+    });
+    const app = new FreneticApp(createCanvas(), new RecordingRenderer());
+
+    app.start();
+    app.startPlaying();
+    app.advanceTime(1000 / 60);
+    const afterDeterministicStep = renderPayload(app);
+
+    scheduledFrames[0](1000);
+    const afterScheduledFrame = renderPayload(app);
+
+    expect(afterDeterministicStep.hud.steeringTracePoints).toBe(1);
+    expect(afterScheduledFrame.hud.steeringTracePoints).toBe(1);
+    expect(scheduledFrames).toHaveLength(1);
+  });
+
   it('toggles fullscreen with F', () => {
     const { canvas, press } = createAppWithKeyboard();
     const exitFullscreen = vi.mocked(document.exitFullscreen);

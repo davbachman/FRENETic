@@ -15,6 +15,24 @@ import { TunnelRings } from './tunnel';
 
 const SCREEN_UP = new Vector3(0, 0, 1);
 
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+export function calculateCameraLookTarget(simulation: SimulationState): Vector3 {
+  const { player } = simulation;
+  const forwardTarget = player.position.clone().add(player.tangent);
+  const centerlinePreview = player.nearestSample.position
+    .clone()
+    .add(player.nearestSample.tangent);
+  const distanceFromCenter = player.position.distanceTo(player.nearestSample.position);
+  const recoveryStart = simulation.sampled.level.tubeRadius * 0.45;
+  const recoveryWidth = Math.max(1e-6, simulation.sampled.level.tubeRadius * 1.25);
+  const recovery = clamp01((distanceFromCenter - recoveryStart) / recoveryWidth);
+
+  return forwardTarget.lerp(centerlinePreview, recovery);
+}
+
 export class GameRenderer implements RendererLike {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
@@ -48,9 +66,7 @@ export class GameRenderer implements RendererLike {
 
     this.camera.position.copy(simulation.player.position);
     this.camera.up.copy(SCREEN_UP);
-    this.camera.lookAt(
-      simulation.player.position.clone().add(simulation.player.tangent),
-    );
+    this.camera.lookAt(calculateCameraLookTarget(simulation));
 
     this.hud.draw(game, simulation);
     this.renderer.clear();

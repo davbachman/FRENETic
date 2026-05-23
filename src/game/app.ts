@@ -77,6 +77,7 @@ export class FreneticApp {
       return;
     }
 
+    this.running = false;
     this.accumulator += ms / 1000;
     this.drainAccumulator();
     this.renderer.render(this.game, this.simulation);
