@@ -158,11 +158,14 @@ export function calculateResponsiveHudLayout(width: number, height: number): Hud
 }
 
 export function calculateStatusTextY(width: number, layout: HudLayout): number {
-  if (width < 560) {
-    return Math.max(
-      layout.curvatureMeter.y + layout.curvatureMeter.height,
-      layout.torsionMeter.y + layout.torsionMeter.height,
-    ) + 15;
+  const meterBottom = Math.max(
+    layout.curvatureMeter.y + layout.curvatureMeter.height,
+    layout.torsionMeter.y + layout.torsionMeter.height,
+  );
+  const centerGap =
+    layout.torsionMeter.x - (layout.curvatureMeter.x + layout.curvatureMeter.width);
+  if (width < 560 || centerGap < 320) {
+    return meterBottom + 15;
   }
 
   return 31;

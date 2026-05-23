@@ -146,6 +146,25 @@ describe('HUD overlay helpers', () => {
     );
   });
 
+  it('places status text below top meters when medium-width center gaps are too narrow', () => {
+    for (const width of [560, 768, 1024]) {
+      const layout = calculateResponsiveHudLayout(width, 720);
+
+      expect(calculateStatusTextY(width, layout)).toBeGreaterThan(
+        Math.max(
+          layout.curvatureMeter.y + layout.curvatureMeter.height,
+          layout.torsionMeter.y + layout.torsionMeter.height,
+        ),
+      );
+    }
+  });
+
+  it('keeps status text in the top center when desktop meter gap is wide enough', () => {
+    const layout = calculateResponsiveHudLayout(1280, 720);
+
+    expect(calculateStatusTextY(1280, layout)).toBe(31);
+  });
+
   it('projects minimap samples into a padded square while preserving nearest sample identity', () => {
     const samples = [
       sample(0, -2, -1),
