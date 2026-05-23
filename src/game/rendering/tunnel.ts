@@ -98,7 +98,8 @@ export class TunnelRings {
       const distanceT = ringIndex / Math.max(1, this.rings.length - 1);
       const baseOpacity = Math.max(MIN_OPACITY, MAX_OPACITY * (1 - distanceT));
 
-      visual.layers.forEach((ring, layerIndex) => {
+      for (let layerIndex = 0; layerIndex < visual.layers.length; layerIndex += 1) {
+        const ring = visual.layers[layerIndex];
         const geometry = ring.geometry as BufferGeometry;
         const position = geometry.getAttribute('position') as BufferAttribute;
         const layer = RING_LAYERS[layerIndex];
@@ -112,7 +113,7 @@ export class TunnelRings {
         material.color.copy(color);
         material.opacity = Math.max(MIN_OPACITY * layer.opacityScale, baseOpacity * layer.opacityScale);
         material.needsUpdate = true;
-      });
+      }
     }
   }
 

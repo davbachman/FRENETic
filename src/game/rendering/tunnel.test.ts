@@ -125,19 +125,35 @@ describe('TunnelRings', () => {
     const secondSimulation = makeSimulation(4);
 
     tunnel.update(firstSimulation);
-    const firstRing = ringLayers(tunnel, 0)[0];
-    const geometry = firstRing.geometry as BufferGeometry;
-    const firstAttribute = geometry.getAttribute('position');
-    const firstArray = firstAttribute.array;
-    const firstX = firstArray[0];
+    const firstLayerState = ringLayers(tunnel, 0).map((ring) => {
+      const geometry = ring.geometry as BufferGeometry;
+      const attribute = geometry.getAttribute('position');
+      return {
+        geometry,
+        attribute,
+        array: attribute.array,
+        firstX: attribute.array[0],
+      };
+    });
 
     tunnel.update(secondSimulation);
-    const secondAttribute = geometry.getAttribute('position');
+    const updatedSample = secondSimulation.sampled.samples[4];
+    const layerDistances = firstLayerState.map(({ geometry, attribute, array, firstX }) => {
+      const secondAttribute = geometry.getAttribute('position');
+      const firstPoint = new Vector3().fromBufferAttribute(secondAttribute, 0);
 
-    expect(secondAttribute).toBe(firstAttribute);
-    expect(secondAttribute.array).toBe(firstArray);
-    expect(secondAttribute.array[0]).not.toBe(firstX);
-    expect(secondAttribute.array[0]).toBeCloseTo(secondSimulation.sampled.samples[4].position.x, 5);
+      expect(secondAttribute).toBe(attribute);
+      expect(secondAttribute.array).toBe(array);
+      expect(secondAttribute.array[0]).not.toBe(firstX);
+      expect(secondAttribute.array[0]).toBeCloseTo(updatedSample.position.x, 5);
+      expect(geometry.drawRange.count).toBe(64);
+
+      return firstPoint.distanceTo(updatedSample.position);
+    });
+
+    expect(layerDistances[0]).toBeCloseTo(secondSimulation.sampled.level.tubeRadius, 5);
+    expect(layerDistances[1]).toBeLessThan(layerDistances[0] - 0.05);
+    expect(layerDistances[2]).toBeGreaterThan(layerDistances[0] + 0.05);
 
     tunnel.dispose();
   });
