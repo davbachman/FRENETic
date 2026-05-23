@@ -147,7 +147,7 @@ export class FreneticApp {
       }
     } else if (event.key.toLowerCase() === 'r') {
       this.restartLevel();
-    } else if (event.key.toLowerCase() === 'n') {
+    } else if (event.key.toLowerCase() === 'n' || event.key.toLowerCase() === 'b') {
       this.nextLevel();
     } else if (event.key.toLowerCase() === 'p') {
       setMode(this.game, this.game.mode === 'paused' ? 'playing' : 'paused');

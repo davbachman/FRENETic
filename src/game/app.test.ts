@@ -238,4 +238,14 @@ describe('FreneticApp', () => {
 
     expect(renderPayload(app).mode).toBe('playing');
   });
+
+  it('advances levels with N and the browser-client-compatible B alias', () => {
+    const { app, press } = createAppWithKeyboard();
+
+    press('N');
+    expect(renderPayload(app).level.id).toBe('lifted-wave');
+
+    press('b');
+    expect(renderPayload(app).level.id).toBe('trefoil-knot');
+  });
 });
