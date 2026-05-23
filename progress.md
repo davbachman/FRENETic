@@ -10,3 +10,9 @@ Task 9 notes:
 - Browser check used the develop-web-game Playwright client against Vite on 127.0.0.1:4174. Start-mode screenshot shows cyan tunnel rings and render_game_to_text() returns mode/level/player state.
 - Note: when entering play mode with no steering for several frames, the existing simulation quickly leaves the centerline and the first-person camera can point away from the sampled tunnel; steering/HUD work is expected in later tasks.
 - Task 9 review fix: added a failing test for stable ring position attribute/array identity across repeated TunnelRings.update() calls, then changed TunnelRings to preallocate position buffers and mutate them in place without per-segment Vector3 allocations.
+
+Task 10 notes:
+- Added focused HUD helper tests first. Initial targeted run fails because src/game/rendering/hud.ts is not implemented yet, establishing the RED step for Task 10.
+- Implemented HudOverlay with canvas texture, top blue/green meters, bottom-left minimap, pointer-aligned radar, compact status text, and renderer same-canvas overlay pass.
+- Verification: targeted HUD tests, full Vitest suite, typecheck, and production build pass. Playwright screenshots written under /private/tmp/frenetic-task10-hud and /private/tmp/frenetic-task10-hud-playing.
+- Browser note: start-mode screenshot shows tunnel rings plus HUD. Playing-mode HUD remains visible and reports steering history; the pre-existing Task 9 camera/simulation drift can still leave the tunnel out of view after several frames.

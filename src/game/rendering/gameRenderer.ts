@@ -9,6 +9,7 @@ import type { RendererLike } from '../app';
 import type { GameState } from '../state/gameState';
 import type { SimulationState } from '../simulation/types';
 import { hudColors } from './colors';
+import { HudOverlay } from './hud';
 import { TunnelRings } from './tunnel';
 
 const SCREEN_UP = new Vector3(0, 0, 1);
@@ -18,9 +19,11 @@ export class GameRenderer implements RendererLike {
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(74, 1, 0.03, 180);
   private readonly tunnel = new TunnelRings();
+  private readonly hud = new HudOverlay();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new WebGLRenderer({ canvas, antialias: true });
+    this.renderer.autoClear = false;
     this.renderer.setClearColor(hudColors.background, 1);
     this.renderer.setPixelRatio(Math.min(2, typeof window === 'undefined' ? 1 : window.devicePixelRatio));
 
@@ -33,9 +36,10 @@ export class GameRenderer implements RendererLike {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
+    this.hud.resize(width, height);
   }
 
-  render(_game: GameState, simulation: SimulationState): void {
+  render(game: GameState, simulation: SimulationState): void {
     this.tunnel.update(simulation);
 
     this.camera.position.copy(simulation.player.position);
@@ -44,10 +48,15 @@ export class GameRenderer implements RendererLike {
       simulation.player.position.clone().add(simulation.player.tangent),
     );
 
+    this.hud.draw(game, simulation);
+    this.renderer.clear();
     this.renderer.render(this.scene, this.camera);
+    this.renderer.clearDepth();
+    this.renderer.render(this.hud.scene, this.hud.camera);
   }
 
   dispose(): void {
+    this.hud.dispose();
     this.tunnel.dispose();
     this.renderer.dispose();
   }
