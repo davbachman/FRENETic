@@ -99,6 +99,7 @@ export class FreneticApp {
   private resetSimulation(): void {
     this.sampled = sampleLevelCurve(this.game.level);
     this.simulation = createSimulationState(this.sampled);
+    this.accumulator = 0;
   }
 
   private step(dt: number): void {

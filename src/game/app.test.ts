@@ -102,6 +102,36 @@ describe('FreneticApp', () => {
     expect(payload.hud.steeringTracePoints).toBe(0);
   });
 
+  it('clears partial fixed-step time when advancing level', () => {
+    const app = new FreneticApp(createCanvas(), new RecordingRenderer());
+    app.startPlaying();
+    app.advanceTime(15);
+
+    app.nextLevel();
+    app.advanceTime(2);
+    const payload = renderPayload(app);
+
+    expect(payload.level.id).toBe('lifted-wave');
+    expect(payload.mode).toBe('playing');
+    expect(payload.player.progress).toBe(0);
+    expect(payload.hud.steeringTracePoints).toBe(0);
+  });
+
+  it('clears partial fixed-step time when restarting level', () => {
+    const app = new FreneticApp(createCanvas(), new RecordingRenderer());
+    app.startPlaying();
+    app.advanceTime(15);
+
+    app.restartLevel();
+    app.advanceTime(2);
+    const payload = renderPayload(app);
+
+    expect(payload.level.id).toBe('planar-wave');
+    expect(payload.mode).toBe('playing');
+    expect(payload.player.progress).toBe(0);
+    expect(payload.hud.steeringTracePoints).toBe(0);
+  });
+
   it('does not schedule duplicate animation loops when started more than once', () => {
     const scheduledFrames: FrameRequestCallback[] = [];
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
