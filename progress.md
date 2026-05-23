@@ -17,3 +17,8 @@ Task 10 notes:
 - Verification: targeted HUD tests, full Vitest suite, typecheck, and production build pass. Playwright screenshots written under /private/tmp/frenetic-task10-hud and /private/tmp/frenetic-task10-hud-playing.
 - Browser note: start-mode screenshot shows tunnel rings plus HUD. Playing-mode HUD remains visible and reports steering history; the pre-existing Task 9 camera/simulation drift can still leave the tunnel out of view after several frames.
 - Task 10 review fix: preserved signed torsion in the top-right meter, kept mobile HUD panels/text separated at 320x568 without changing pointer-aligned radar coordinates, and anchored the red radar vector at the current steering endpoint. Added helper tests for each review finding.
+
+Task 11 notes:
+- Added a Starfield points shell to the scene that follows the player/camera, plus fullscreen-aware F/Escape keyboard handling.
+- Added focused tests for Starfield geometry/material/disposal and fullscreen/Escape keyboard behavior.
+- Verification: targeted Starfield/app tests, full Vitest suite, typecheck, and production build pass. Playwright screenshots written under /private/tmp/frenetic-task11-start and /private/tmp/frenetic-task11-playing; start shows tunnel rings, HUD, and stars, while playing shows the expected carry-forward no-steering tunnel drift with HUD/starfield still visible.

@@ -139,6 +139,12 @@ export class FreneticApp {
   private onKeyDown = (event: KeyboardEvent): void => {
     if (event.key === 'Enter' && this.game.mode === 'start') {
       this.startPlaying();
+    } else if (event.key === 'Escape') {
+      if (document.fullscreenElement) {
+        void document.exitFullscreen();
+      } else if (this.game.mode === 'paused') {
+        setMode(this.game, 'playing');
+      }
     } else if (event.key.toLowerCase() === 'r') {
       this.restartLevel();
     } else if (event.key.toLowerCase() === 'n') {
@@ -146,7 +152,11 @@ export class FreneticApp {
     } else if (event.key.toLowerCase() === 'p') {
       setMode(this.game, this.game.mode === 'paused' ? 'playing' : 'paused');
     } else if (event.key.toLowerCase() === 'f') {
-      void this.canvas.requestFullscreen?.();
+      if (document.fullscreenElement) {
+        void document.exitFullscreen();
+      } else {
+        void this.canvas.requestFullscreen?.();
+      }
     }
   };
 }

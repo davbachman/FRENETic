@@ -10,6 +10,7 @@ import type { GameState } from '../state/gameState';
 import type { SimulationState } from '../simulation/types';
 import { hudColors } from './colors';
 import { HudOverlay } from './hud';
+import { Starfield } from './starfield';
 import { TunnelRings } from './tunnel';
 
 const SCREEN_UP = new Vector3(0, 0, 1);
@@ -18,6 +19,7 @@ export class GameRenderer implements RendererLike {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(74, 1, 0.03, 180);
+  private readonly starfield = new Starfield();
   private readonly tunnel = new TunnelRings();
   private readonly hud = new HudOverlay();
 
@@ -28,6 +30,7 @@ export class GameRenderer implements RendererLike {
     this.renderer.setPixelRatio(Math.min(2, typeof window === 'undefined' ? 1 : window.devicePixelRatio));
 
     this.scene.add(new AmbientLight(0xffffff, 1.15));
+    this.scene.add(this.starfield.points);
     this.scene.add(this.tunnel.group);
     this.camera.up.copy(SCREEN_UP);
   }
@@ -41,6 +44,7 @@ export class GameRenderer implements RendererLike {
 
   render(game: GameState, simulation: SimulationState): void {
     this.tunnel.update(simulation);
+    this.starfield.points.position.copy(simulation.player.position);
 
     this.camera.position.copy(simulation.player.position);
     this.camera.up.copy(SCREEN_UP);
@@ -58,6 +62,7 @@ export class GameRenderer implements RendererLike {
   dispose(): void {
     this.hud.dispose();
     this.tunnel.dispose();
+    this.starfield.dispose();
     this.renderer.dispose();
   }
 }

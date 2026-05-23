@@ -15,6 +15,51 @@ function createCanvas(): HTMLCanvasElement {
   return { width: 800, height: 600 } as HTMLCanvasElement;
 }
 
+function createDomCanvas(): HTMLCanvasElement {
+  return {
+    width: 800,
+    height: 600,
+    clientWidth: 800,
+    clientHeight: 600,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }),
+    requestFullscreen: vi.fn().mockResolvedValue(undefined),
+  } as unknown as HTMLCanvasElement;
+}
+
+function createAppWithKeyboard() {
+  let keydown: ((event: KeyboardEvent) => void) | null = null;
+  vi.stubGlobal('window', {
+    innerWidth: 800,
+    innerHeight: 600,
+    devicePixelRatio: 1,
+    addEventListener: vi.fn((type: string, listener: EventListener) => {
+      if (type === 'keydown') {
+        keydown = listener as (event: KeyboardEvent) => void;
+      }
+    }),
+    removeEventListener: vi.fn(),
+  });
+  vi.stubGlobal('document', {
+    fullscreenElement: null,
+    exitFullscreen: vi.fn().mockResolvedValue(undefined),
+  });
+
+  const canvas = createDomCanvas();
+  const app = new FreneticApp(canvas, new RecordingRenderer());
+
+  if (!keydown) {
+    throw new Error('keydown listener was not registered');
+  }
+
+  return {
+    app,
+    canvas,
+    press: (key: string) => keydown?.({ key } as KeyboardEvent),
+  };
+}
+
 function renderPayload(app: FreneticApp): ReturnType<typeof JSON.parse> {
   return JSON.parse(app.renderGameToText());
 }
@@ -144,5 +189,53 @@ describe('FreneticApp', () => {
     app.start();
 
     expect(scheduledFrames).toHaveLength(1);
+  });
+
+  it('toggles fullscreen with F', () => {
+    const { canvas, press } = createAppWithKeyboard();
+    const exitFullscreen = vi.mocked(document.exitFullscreen);
+
+    press('F');
+
+    expect(canvas.requestFullscreen).toHaveBeenCalledOnce();
+    expect(exitFullscreen).not.toHaveBeenCalled();
+
+    vi.stubGlobal('document', {
+      fullscreenElement: canvas,
+      exitFullscreen,
+    });
+
+    press('f');
+
+    expect(canvas.requestFullscreen).toHaveBeenCalledOnce();
+    expect(exitFullscreen).toHaveBeenCalledOnce();
+  });
+
+  it('exits fullscreen with Escape before changing pause state', () => {
+    const { app, canvas, press } = createAppWithKeyboard();
+    app.startPlaying();
+    press('P');
+    expect(renderPayload(app).mode).toBe('paused');
+
+    const exitFullscreen = vi.mocked(document.exitFullscreen);
+    vi.stubGlobal('document', {
+      fullscreenElement: canvas,
+      exitFullscreen,
+    });
+
+    press('Escape');
+
+    expect(exitFullscreen).toHaveBeenCalledOnce();
+    expect(renderPayload(app).mode).toBe('paused');
+  });
+
+  it('unpauses with Escape when fullscreen is inactive', () => {
+    const { app, press } = createAppWithKeyboard();
+    app.startPlaying();
+    press('P');
+
+    press('Escape');
+
+    expect(renderPayload(app).mode).toBe('playing');
   });
 });
