@@ -45,3 +45,12 @@ Final review fix notes:
 - GameRenderer now uses a centerline recovery look target when the player drifts far from the tunnel, keeping the authored tunnel rings visible instead of showing only stars/HUD while the game remains in playing mode.
 - Verification after final review fixes: npm run test:run passed with 78 tests, npm run typecheck passed, and npm run build passed.
 - Web-game steering and level-cycle checks ran at http://127.0.0.1:5173/ with no console error artifacts. Steering ended mode "playing" with 31 steering trace points, health 1, non-neutral smoothed steering, and visible tunnel/HUD. Level-cycle ended mode "playing" on authored level index 3, "cinquefoil-knot", with deterministic trace count 1 and visible knot tunnel/HUD.
+
+Cinematic HUD UI pass notes:
+- Implemented the approved focused cinematic HUD pass: expanded neon/glass palette, larger hybrid top meters, volumetric three-layer tunnel rings, angular minimap/radar pods, and an integrated lower console rail.
+- Added focused helper tests for cinematic meter layout, narrow viewport panel separation at 280x568, meter track geometry, lower rail geometry, and layered tunnel ring allocation/reuse.
+- Review fixes completed during implementation: narrow HUD layout now hard-caps panel widths by available space, and TunnelRings.update() uses indexed loops for layered ring updates to avoid per-frame callback allocation.
+- Verification: npm run typecheck passed, npm run test:run passed with 85 tests, and npm run build passed.
+- Web-game steering check ran at http://127.0.0.1:5173/ with screenshots in output/web-game/cinematic-hud-steer and no console error artifact. State reported mode "playing", level "Planar Wave", HUD visible fields, and 31 steering trace points.
+- Web-game level-cycle check ran at http://127.0.0.1:5173/ with screenshots in output/web-game/cinematic-hud-level-cycle and no console error artifact. State reported mode "playing" on authored level index 3, "cinquefoil-knot", with HUD visible fields.
+- Compact viewport check ran at 360x640 with screenshots in output/web-game/cinematic-hud-mobile and no console errors. Meters, minimap, radar pod, and lower rail remained separated and readable.
