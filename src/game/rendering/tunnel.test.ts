@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { BufferGeometry, LineBasicMaterial, LineLoop, Vector3 } from 'three';
+import { BufferGeometry, Group, LineBasicMaterial, LineLoop, Vector3 } from 'three';
 import type { CurveSample, LevelDefinition, SampledCurve } from '../curves/types';
 import type { SimulationState } from '../simulation/types';
 import { TunnelRings } from './tunnel';
@@ -61,22 +61,32 @@ function makeSimulation(nearestIndex = 3): SimulationState {
   };
 }
 
+function ringLayers(tunnel: TunnelRings, ringIndex: number): LineLoop[] {
+  const ringGroup = tunnel.group.children[ringIndex] as Group;
+  return ringGroup.children as LineLoop[];
+}
+
 describe('TunnelRings', () => {
-  it('creates 46 initially hidden line-loop rings with preallocated position attributes', () => {
+  it('creates 46 initially hidden volumetric ring groups with preallocated line layers', () => {
     const tunnel = new TunnelRings();
 
     expect(tunnel.group.children).toHaveLength(46);
     for (const child of tunnel.group.children) {
-      const ring = child as LineLoop;
-      expect(child.type).toBe('LineLoop');
-      const geometry = ring.geometry as BufferGeometry;
-      const material = ring.material as LineBasicMaterial;
-      const position = geometry.getAttribute('position');
-      expect(position).toBeDefined();
-      expect(position.count).toBe(64);
-      expect(geometry.drawRange.count).toBe(0);
-      expect(material.transparent).toBe(true);
-      expect(material.opacity).toBeGreaterThan(0);
+      expect(child.type).toBe('Group');
+      const group = child as Group;
+      expect(group.children).toHaveLength(3);
+      for (const layer of group.children as LineLoop[]) {
+        expect(layer.type).toBe('LineLoop');
+        const geometry = layer.geometry as BufferGeometry;
+        const material = layer.material as LineBasicMaterial;
+        const position = geometry.getAttribute('position');
+        expect(position).toBeDefined();
+        expect(position.count).toBe(64);
+        expect(geometry.drawRange.count).toBe(0);
+        expect(material.transparent).toBe(true);
+        expect(material.depthWrite).toBe(false);
+        expect(material.opacity).toBeGreaterThan(0);
+      }
     }
 
     tunnel.dispose();
@@ -88,7 +98,7 @@ describe('TunnelRings', () => {
 
     tunnel.update(simulation);
 
-    const firstRing = tunnel.group.children[0] as LineLoop;
+    const firstRing = ringLayers(tunnel, 0)[0];
     const firstPositions = (firstRing.geometry as BufferGeometry).getAttribute('position');
     const firstCenter = new Vector3().fromBufferAttribute(firstPositions, 0);
     expect(firstCenter.x).toBeCloseTo(simulation.sampled.samples[10].position.x, 5);
@@ -97,7 +107,7 @@ describe('TunnelRings', () => {
       5,
     );
 
-    const wrappedRing = tunnel.group.children[3] as LineLoop;
+    const wrappedRing = ringLayers(tunnel, 3)[0];
     const wrappedPositions = (wrappedRing.geometry as BufferGeometry).getAttribute('position');
     const wrappedCenter = new Vector3().fromBufferAttribute(wrappedPositions, 0);
     expect(wrappedCenter.x).toBeCloseTo(simulation.sampled.samples[1].position.x, 5);
@@ -115,7 +125,7 @@ describe('TunnelRings', () => {
     const secondSimulation = makeSimulation(4);
 
     tunnel.update(firstSimulation);
-    const firstRing = tunnel.group.children[0] as LineLoop;
+    const firstRing = ringLayers(tunnel, 0)[0];
     const geometry = firstRing.geometry as BufferGeometry;
     const firstAttribute = geometry.getAttribute('position');
     const firstArray = firstAttribute.array;
@@ -132,15 +142,34 @@ describe('TunnelRings', () => {
     tunnel.dispose();
   });
 
+  it('keeps core layers brighter than halo layers and fades distant rings', () => {
+    const tunnel = new TunnelRings();
+
+    tunnel.update(makeSimulation());
+
+    const nearLayers = ringLayers(tunnel, 0);
+    const farLayers = ringLayers(tunnel, tunnel.group.children.length - 1);
+    const nearCore = nearLayers[0].material as LineBasicMaterial;
+    const nearOuterHalo = nearLayers[2].material as LineBasicMaterial;
+    const farCore = farLayers[0].material as LineBasicMaterial;
+
+    expect(nearCore.opacity).toBeGreaterThan(nearOuterHalo.opacity);
+    expect(nearCore.opacity).toBeGreaterThan(farCore.opacity);
+    expect(nearCore.color.getStyle()).toBe('rgb(255,0,170)');
+
+    tunnel.dispose();
+  });
+
   it('disposes ring geometries and materials', () => {
     const tunnel = new TunnelRings();
     tunnel.update(makeSimulation());
 
-    const geometryDispose = tunnel.group.children.map((child) =>
-      vi.spyOn((child as LineLoop).geometry as BufferGeometry, 'dispose'),
+    const layers = tunnel.group.children.flatMap((child) => (child as Group).children as LineLoop[]);
+    const geometryDispose = layers.map((layer) =>
+      vi.spyOn(layer.geometry as BufferGeometry, 'dispose'),
     );
-    const materialDispose = tunnel.group.children.map((child) =>
-      vi.spyOn((child as LineLoop).material as LineBasicMaterial, 'dispose'),
+    const materialDispose = layers.map((layer) =>
+      vi.spyOn(layer.material as LineBasicMaterial, 'dispose'),
     );
 
     tunnel.dispose();

@@ -14,6 +14,17 @@ const RING_COUNT = 46;
 const RING_SEGMENTS = 64;
 const MIN_OPACITY = 0.08;
 const MAX_OPACITY = 0.56;
+const RING_LAYERS = [
+  { radiusOffset: 0, opacityScale: 1 },
+  { radiusOffset: -0.035, opacityScale: 0.38 },
+  { radiusOffset: 0.035, opacityScale: 0.3 },
+] as const;
+
+interface RingVisual {
+  group: Group;
+  layers: LineLoop[];
+}
+
 const UNIT_CIRCLE = Array.from({ length: RING_SEGMENTS }, (_, segment) => {
   const angle = (segment / RING_SEGMENTS) * Math.PI * 2;
   return {
@@ -43,26 +54,31 @@ function writeRingPositions(sample: CurveSample, radius: number, positions: Floa
 export class TunnelRings {
   public readonly group = new Group();
 
-  private readonly rings: LineLoop[];
+  private readonly rings: RingVisual[];
 
   constructor() {
     this.rings = Array.from({ length: RING_COUNT }, (_, index) => {
       const opacityT = 1 - index / Math.max(1, RING_COUNT - 1);
-      const material = new LineBasicMaterial({
-        color: hudColors.cyan,
-        transparent: true,
-        opacity: MIN_OPACITY + opacityT * (MAX_OPACITY - MIN_OPACITY),
-        depthWrite: false,
+      const group = new Group();
+      const layers = RING_LAYERS.map((layer) => {
+        const material = new LineBasicMaterial({
+          color: hudColors.cyan,
+          transparent: true,
+          opacity: (MIN_OPACITY + opacityT * (MAX_OPACITY - MIN_OPACITY)) * layer.opacityScale,
+          depthWrite: false,
+        });
+        const geometry = new BufferGeometry();
+        geometry.setAttribute(
+          'position',
+          new BufferAttribute(new Float32Array(RING_SEGMENTS * 3), 3),
+        );
+        geometry.setDrawRange(0, 0);
+        const line = new LineLoop(geometry, material);
+        group.add(line);
+        return line;
       });
-      const geometry = new BufferGeometry();
-      geometry.setAttribute(
-        'position',
-        new BufferAttribute(new Float32Array(RING_SEGMENTS * 3), 3),
-      );
-      geometry.setDrawRange(0, 0);
-      const ring = new LineLoop(geometry, material);
-      this.group.add(ring);
-      return ring;
+      this.group.add(group);
+      return { group, layers };
     });
   }
 
@@ -78,26 +94,34 @@ export class TunnelRings {
 
     for (let ringIndex = 0; ringIndex < this.rings.length; ringIndex += 1) {
       const sample = samples[wrap(startIndex + ringIndex * sampleStride, samples.length)];
-      const ring = this.rings[ringIndex];
-      const geometry = ring.geometry as BufferGeometry;
-      const position = geometry.getAttribute('position') as BufferAttribute;
-      writeRingPositions(sample, level.tubeRadius, position.array as Float32Array);
-      position.needsUpdate = true;
-      geometry.setDrawRange(0, RING_SEGMENTS);
-      geometry.computeBoundingSphere();
-
-      const material = ring.material as LineBasicMaterial;
+      const visual = this.rings[ringIndex];
       const distanceT = ringIndex / Math.max(1, this.rings.length - 1);
-      material.color.copy(color);
-      material.opacity = Math.max(MIN_OPACITY, MAX_OPACITY * (1 - distanceT));
-      material.needsUpdate = true;
+      const baseOpacity = Math.max(MIN_OPACITY, MAX_OPACITY * (1 - distanceT));
+
+      visual.layers.forEach((ring, layerIndex) => {
+        const geometry = ring.geometry as BufferGeometry;
+        const position = geometry.getAttribute('position') as BufferAttribute;
+        const layer = RING_LAYERS[layerIndex];
+        const layerRadius = level.tubeRadius * (1 + layer.radiusOffset);
+        writeRingPositions(sample, layerRadius, position.array as Float32Array);
+        position.needsUpdate = true;
+        geometry.setDrawRange(0, RING_SEGMENTS);
+        geometry.computeBoundingSphere();
+
+        const material = ring.material as LineBasicMaterial;
+        material.color.copy(color);
+        material.opacity = Math.max(MIN_OPACITY * layer.opacityScale, baseOpacity * layer.opacityScale);
+        material.needsUpdate = true;
+      });
     }
   }
 
   dispose(): void {
-    for (const ring of this.rings) {
-      ring.geometry.dispose();
-      (ring.material as LineBasicMaterial).dispose();
+    for (const visual of this.rings) {
+      for (const ring of visual.layers) {
+        ring.geometry.dispose();
+        (ring.material as LineBasicMaterial).dispose();
+      }
     }
   }
 }
