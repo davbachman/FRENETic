@@ -5,7 +5,6 @@ import {
   Group,
   LineBasicMaterial,
   LineLoop,
-  Vector3,
 } from 'three';
 import type { CurveSample } from '../curves/types';
 import type { SimulationState } from '../simulation/types';
@@ -15,28 +14,30 @@ const RING_COUNT = 46;
 const RING_SEGMENTS = 64;
 const MIN_OPACITY = 0.08;
 const MAX_OPACITY = 0.56;
+const UNIT_CIRCLE = Array.from({ length: RING_SEGMENTS }, (_, segment) => {
+  const angle = (segment / RING_SEGMENTS) * Math.PI * 2;
+  return {
+    cos: Math.cos(angle),
+    sin: Math.sin(angle),
+  };
+});
 
 function wrap(index: number, length: number): number {
   return ((index % length) + length) % length;
 }
 
-function ringPositions(sample: CurveSample, radius: number): Float32Array {
-  const positions = new Float32Array(RING_SEGMENTS * 3);
-
+function writeRingPositions(sample: CurveSample, radius: number, positions: Float32Array): void {
   for (let segment = 0; segment < RING_SEGMENTS; segment += 1) {
-    const angle = (segment / RING_SEGMENTS) * Math.PI * 2;
-    const offset = sample.normal
-      .clone()
-      .multiplyScalar(Math.cos(angle) * radius)
-      .add(sample.binormal.clone().multiplyScalar(Math.sin(angle) * radius));
-    const point = sample.position.clone().add(offset);
+    const normalScale = UNIT_CIRCLE[segment].cos * radius;
+    const binormalScale = UNIT_CIRCLE[segment].sin * radius;
     const positionIndex = segment * 3;
-    positions[positionIndex] = point.x;
-    positions[positionIndex + 1] = point.y;
-    positions[positionIndex + 2] = point.z;
+    positions[positionIndex] =
+      sample.position.x + sample.normal.x * normalScale + sample.binormal.x * binormalScale;
+    positions[positionIndex + 1] =
+      sample.position.y + sample.normal.y * normalScale + sample.binormal.y * binormalScale;
+    positions[positionIndex + 2] =
+      sample.position.z + sample.normal.z * normalScale + sample.binormal.z * binormalScale;
   }
-
-  return positions;
 }
 
 export class TunnelRings {
@@ -53,7 +54,13 @@ export class TunnelRings {
         opacity: MIN_OPACITY + opacityT * (MAX_OPACITY - MIN_OPACITY),
         depthWrite: false,
       });
-      const ring = new LineLoop(new BufferGeometry(), material);
+      const geometry = new BufferGeometry();
+      geometry.setAttribute(
+        'position',
+        new BufferAttribute(new Float32Array(RING_SEGMENTS * 3), 3),
+      );
+      geometry.setDrawRange(0, 0);
+      const ring = new LineLoop(geometry, material);
       this.group.add(ring);
       return ring;
     });
@@ -73,10 +80,10 @@ export class TunnelRings {
       const sample = samples[wrap(startIndex + ringIndex * sampleStride, samples.length)];
       const ring = this.rings[ringIndex];
       const geometry = ring.geometry as BufferGeometry;
-      geometry.setAttribute(
-        'position',
-        new BufferAttribute(ringPositions(sample, level.tubeRadius), 3),
-      );
+      const position = geometry.getAttribute('position') as BufferAttribute;
+      writeRingPositions(sample, level.tubeRadius, position.array as Float32Array);
+      position.needsUpdate = true;
+      geometry.setDrawRange(0, RING_SEGMENTS);
       geometry.computeBoundingSphere();
 
       const material = ring.material as LineBasicMaterial;

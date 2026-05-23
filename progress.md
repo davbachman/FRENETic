@@ -9,3 +9,4 @@ Task 9 notes:
 - Implemented colors, TunnelRings, GameRenderer, and main.ts app wiring. Targeted tunnel test now passes.
 - Browser check used the develop-web-game Playwright client against Vite on 127.0.0.1:4174. Start-mode screenshot shows cyan tunnel rings and render_game_to_text() returns mode/level/player state.
 - Note: when entering play mode with no steering for several frames, the existing simulation quickly leaves the centerline and the first-person camera can point away from the sampled tunnel; steering/HUD work is expected in later tasks.
+- Task 9 review fix: added a failing test for stable ring position attribute/array identity across repeated TunnelRings.update() calls, then changed TunnelRings to preallocate position buffers and mutate them in place without per-segment Vector3 allocations.

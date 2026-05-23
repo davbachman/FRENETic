@@ -62,7 +62,7 @@ function makeSimulation(nearestIndex = 3): SimulationState {
 }
 
 describe('TunnelRings', () => {
-  it('creates 46 initially empty line-loop rings', () => {
+  it('creates 46 initially hidden line-loop rings with preallocated position attributes', () => {
     const tunnel = new TunnelRings();
 
     expect(tunnel.group.children).toHaveLength(46);
@@ -71,7 +71,10 @@ describe('TunnelRings', () => {
       expect(child.type).toBe('LineLoop');
       const geometry = ring.geometry as BufferGeometry;
       const material = ring.material as LineBasicMaterial;
-      expect(geometry.getAttribute('position')).toBeUndefined();
+      const position = geometry.getAttribute('position');
+      expect(position).toBeDefined();
+      expect(position.count).toBe(64);
+      expect(geometry.drawRange.count).toBe(0);
       expect(material.transparent).toBe(true);
       expect(material.opacity).toBeGreaterThan(0);
     }
@@ -102,6 +105,29 @@ describe('TunnelRings', () => {
     const material = firstRing.material as LineBasicMaterial;
     expect(material.color.getStyle()).toBe('rgb(255,0,170)');
     expect(material.opacity).toBeGreaterThanOrEqual(0.08);
+
+    tunnel.dispose();
+  });
+
+  it('reuses position attributes and arrays while mutating ring data across updates', () => {
+    const tunnel = new TunnelRings();
+    const firstSimulation = makeSimulation(0);
+    const secondSimulation = makeSimulation(4);
+
+    tunnel.update(firstSimulation);
+    const firstRing = tunnel.group.children[0] as LineLoop;
+    const geometry = firstRing.geometry as BufferGeometry;
+    const firstAttribute = geometry.getAttribute('position');
+    const firstArray = firstAttribute.array;
+    const firstX = firstArray[0];
+
+    tunnel.update(secondSimulation);
+    const secondAttribute = geometry.getAttribute('position');
+
+    expect(secondAttribute).toBe(firstAttribute);
+    expect(secondAttribute.array).toBe(firstArray);
+    expect(secondAttribute.array[0]).not.toBe(firstX);
+    expect(secondAttribute.array[0]).toBeCloseTo(secondSimulation.sampled.samples[4].position.x, 5);
 
     tunnel.dispose();
   });
