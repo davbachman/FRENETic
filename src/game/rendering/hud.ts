@@ -120,6 +120,17 @@ export function calculateSignedMeterGeometry(
   };
 }
 
+export function calculateMeterTrack(rect: Rect): Rect {
+  const horizontalPadding = Math.min(24, Math.max(14, rect.width * 0.1));
+  const trackHeight = rect.height < 70 ? 10 : 14;
+  return {
+    x: rect.x + horizontalPadding,
+    y: rect.y + rect.height - trackHeight - 18,
+    width: Math.max(1, rect.width - horizontalPadding * 2),
+    height: trackHeight,
+  };
+}
+
 export function calculateRadarHudRect(width: number, height: number): Rect {
   return getRadarRect(width, height);
 }
@@ -287,6 +298,42 @@ export class HudOverlay {
     this.material.dispose();
   }
 
+  private traceAngularPanel(rect: Rect, bevel: number): void {
+    const ctx = this.ctx;
+    const cut = Math.min(bevel, rect.width * 0.18, rect.height * 0.42);
+    ctx.beginPath();
+    ctx.moveTo(rect.x + cut, rect.y);
+    ctx.lineTo(rect.x + rect.width - cut, rect.y);
+    ctx.lineTo(rect.x + rect.width, rect.y + cut);
+    ctx.lineTo(rect.x + rect.width, rect.y + rect.height - cut);
+    ctx.lineTo(rect.x + rect.width - cut, rect.y + rect.height);
+    ctx.lineTo(rect.x + cut, rect.y + rect.height);
+    ctx.lineTo(rect.x, rect.y + rect.height - cut);
+    ctx.lineTo(rect.x, rect.y + cut);
+    ctx.closePath();
+  }
+
+  private drawAngularPanel(rect: Rect, color: string, intensity = 1): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 16 * intensity;
+    this.traceAngularPanel(rect, Math.min(20, rect.height * 0.28));
+    ctx.fillStyle = hudColors.glassFill;
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = hudColors.magenta;
+    ctx.globalAlpha = 0.32 * intensity;
+    ctx.beginPath();
+    ctx.moveTo(rect.x + 28, rect.y + rect.height - 8);
+    ctx.lineTo(rect.x + rect.width - 28, rect.y + rect.height - 8);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   private drawPanel(rect: Rect): void {
     const ctx = this.ctx;
     ctx.save();
@@ -344,59 +391,76 @@ export class HudOverlay {
     signed = false,
   ): void {
     const ctx = this.ctx;
-    this.drawPanel(rect);
-    const track = {
-      x: rect.x + 16,
-      y: rect.y + 25,
-      width: rect.width - 32,
-      height: 9,
-    };
+    this.drawAngularPanel(rect, color, 1);
+    const track = calculateMeterTrack(rect);
     const geometry = signed
       ? calculateSignedMeterGeometry(value, acceptableRange, maxValue)
       : calculateMeterGeometry(value, acceptableRange, maxValue);
 
     ctx.save();
-    ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.fillStyle = TEXT_DIM;
-    ctx.fillText(label, rect.x + 16, rect.y + 16);
-    ctx.fillStyle = TEXT;
-    ctx.textAlign = 'right';
-    ctx.fillText(value.toFixed(2), rect.x + rect.width - 16, rect.y + 16);
+    ctx.fillText(label === 'CURV' ? 'CURVATURE' : 'TORSION', rect.x + 24, rect.y + 19);
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.11)';
+    ctx.font = rect.width < 170
+      ? '20px ui-monospace, SFMono-Regular, Menlo, monospace'
+      : '32px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 14;
+    ctx.fillText(value.toFixed(2), rect.x + 24, rect.y + (rect.height < 70 ? 42 : 52));
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
     ctx.fillRect(track.x, track.y, track.width, track.height);
-    if (signed) {
-      const center = track.x + track.width / 2;
-      ctx.fillStyle = 'rgba(218, 252, 255, 0.28)';
-      ctx.fillRect(center - 0.5, track.y - 3, 1, track.height + 6);
-    }
-    ctx.fillStyle = 'rgba(112, 255, 157, 0.34)';
+
+    const dangerGradient = ctx.createLinearGradient(track.x, 0, track.x + track.width, 0);
+    dangerGradient.addColorStop(0, hudColors.danger);
+    dangerGradient.addColorStop(0.32, hudColors.amber);
+    dangerGradient.addColorStop(0.5, hudColors.safe);
+    dangerGradient.addColorStop(0.68, hudColors.amber);
+    dangerGradient.addColorStop(1, hudColors.danger);
+    ctx.fillStyle = dangerGradient;
+    ctx.globalAlpha = 0.72;
+    ctx.fillRect(track.x, track.y, track.width, track.height);
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = signed ? 'rgba(112, 255, 157, 0.54)' : 'rgba(50, 229, 109, 0.56)';
     ctx.fillRect(
       track.x + geometry.acceptableStart * track.width,
       track.y,
       Math.max(2, (geometry.acceptableEnd - geometry.acceptableStart) * track.width),
       track.height,
     );
+
+    if (signed) {
+      const center = track.x + track.width / 2;
+      ctx.fillStyle = 'rgba(218, 252, 255, 0.38)';
+      ctx.fillRect(center - 0.5, track.y - 4, 1, track.height + 8);
+    }
+
     const indicatorX = track.x + geometry.indicator * track.width;
-    const gradient = ctx.createLinearGradient(track.x, 0, track.x + track.width, 0);
-    gradient.addColorStop(0, color);
-    gradient.addColorStop(1, 'rgba(255, 255, 255, 0.88)');
-    ctx.fillStyle = gradient;
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(indicatorX, track.y - 8);
+    ctx.lineTo(indicatorX - 7, track.y - 18);
+    ctx.lineTo(indicatorX + 7, track.y - 18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillRect(indicatorX - 1, track.y - 2, 2, track.height + 7);
+
     ctx.shadowColor = color;
     ctx.shadowBlur = 8;
-    if (signed) {
-      const centerX = track.x + track.width / 2;
-      ctx.fillRect(
-        Math.min(centerX, indicatorX),
-        track.y,
-        Math.max(1, Math.abs(indicatorX - centerX)),
-        track.height,
-      );
-    } else {
-      ctx.fillRect(track.x, track.y, geometry.indicator * track.width, track.height);
-    }
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(indicatorX - 1, track.y - 4, 2, track.height + 8);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    const arcCx = rect.x + rect.width - Math.min(66, rect.width * 0.22);
+    const arcCy = rect.y + Math.min(39, rect.height * 0.45);
+    const arcRadius = Math.min(34, rect.width * 0.11, rect.height * 0.38);
+    ctx.beginPath();
+    ctx.arc(arcCx, arcCy, arcRadius, Math.PI * 1.05, Math.PI * 1.9);
+    ctx.stroke();
     ctx.restore();
   }
 

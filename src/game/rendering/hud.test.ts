@@ -4,6 +4,7 @@ import type { CurveSample } from '../curves/types';
 import { getRadarRect } from '../input/pointerTrackpad';
 import {
   calculateMeterGeometry,
+  calculateMeterTrack,
   calculateMinimapProjection,
   calculateRadarVectors,
   calculateRadarHudRect,
@@ -51,6 +52,25 @@ describe('HUD overlay helpers', () => {
     expect(negative.indicator).toBeCloseTo(1 / 3);
     expect(positive.acceptableStart).toBeCloseTo(1 / 6);
     expect(positive.acceptableEnd).toBeCloseTo(5 / 6);
+  });
+
+  it('places meter tracks inside cinematic meter frames', () => {
+    const rect = { x: 28, y: 18, width: 430, height: 86 };
+    const track = calculateMeterTrack(rect);
+
+    expect(track.x).toBe(rect.x + 24);
+    expect(track.width).toBe(rect.width - 48);
+    expect(track.height).toBe(14);
+    expect(track.y + track.height).toBeLessThanOrEqual(rect.y + rect.height - 12);
+  });
+
+  it('keeps compact meter tracks usable on mobile panels', () => {
+    const rect = { x: 18, y: 18, width: 137, height: 58 };
+    const track = calculateMeterTrack(rect);
+
+    expect(track.width).toBeGreaterThanOrEqual(80);
+    expect(track.x).toBeGreaterThan(rect.x);
+    expect(track.y).toBeGreaterThan(rect.y + 28);
   });
 
   it('uses the same radar rectangle as pointer input for HUD drawing', () => {
