@@ -129,15 +129,17 @@ export function calculateResponsiveHudLayout(width: number, height: number): Hud
   const margin = Math.max(8, Math.min(28, minDimension * 0.035));
   const gap = Math.max(8, Math.min(18, width * 0.03));
   const meterMaxWidth = width < 700 ? 320 : 430;
+  const meterAvailableWidth = Math.max(0, (width - margin * 2 - gap) / 2);
   const meterWidth = Math.min(
     meterMaxWidth,
+    meterAvailableWidth,
     Math.max(132, (width - margin * 2 - gap) / 2, width * 0.3),
   );
   const meterHeight = width < 560 ? 58 : 86;
   const bottomGap = Math.max(8, Math.min(18, width * 0.035));
   const radar = getRadarRect(width, height);
-  const minimapMaxWidth = Math.max(96, radar.x - margin - bottomGap);
-  const bottomSize = Math.min(230, Math.max(96, minDimension * 0.26), minimapMaxWidth);
+  const minimapAvailableWidth = Math.max(0, radar.x - margin - bottomGap);
+  const bottomSize = Math.min(230, Math.max(96, minDimension * 0.26), minimapAvailableWidth);
   const bottomY = height - Math.max(bottomSize, radar.height) - margin;
 
   return {

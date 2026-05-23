@@ -95,6 +95,17 @@ describe('HUD overlay helpers', () => {
     expect(layout.radar.x + layout.radar.width).toBeLessThanOrEqual(320);
   });
 
+  it('uses available width as the hard overlap bound on very narrow viewports', () => {
+    const layout = calculateResponsiveHudLayout(280, 568);
+
+    expect(layout.curvatureMeter.x).toBeGreaterThanOrEqual(0);
+    expect(layout.curvatureMeter.x + layout.curvatureMeter.width).toBeLessThanOrEqual(layout.torsionMeter.x);
+    expect(layout.torsionMeter.x + layout.torsionMeter.width).toBeLessThanOrEqual(280);
+    expect(layout.minimap.x).toBeGreaterThanOrEqual(0);
+    expect(layout.minimap.x + layout.minimap.width).toBeLessThanOrEqual(layout.radar.x);
+    expect(layout.radar.x + layout.radar.width).toBeLessThanOrEqual(280);
+  });
+
   it('places compact status text below top meters on narrow viewports', () => {
     const layout = calculateResponsiveHudLayout(320, 568);
 
