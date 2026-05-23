@@ -5,7 +5,11 @@ import { getRadarRect } from '../input/pointerTrackpad';
 import {
   calculateMeterGeometry,
   calculateMinimapProjection,
+  calculateRadarVectors,
   calculateRadarHudRect,
+  calculateResponsiveHudLayout,
+  calculateSignedMeterGeometry,
+  calculateStatusTextY,
   calculateTorsionArc,
 } from './hud';
 
@@ -37,8 +41,41 @@ describe('HUD overlay helpers', () => {
     expect(calculateMeterGeometry(-5, [0.2, 0.4], 1).indicator).toBe(0);
   });
 
+  it('preserves signed torsion in meter geometry with zero centered on the track', () => {
+    const positive = calculateSignedMeterGeometry(0.25, [-0.5, 0.5], 0.75);
+    const negative = calculateSignedMeterGeometry(-0.25, [-0.5, 0.5], 0.75);
+
+    expect(positive.indicator).toBeGreaterThan(0.5);
+    expect(negative.indicator).toBeLessThan(0.5);
+    expect(positive.indicator).toBeCloseTo(2 / 3);
+    expect(negative.indicator).toBeCloseTo(1 / 3);
+    expect(positive.acceptableStart).toBeCloseTo(1 / 6);
+    expect(positive.acceptableEnd).toBeCloseTo(5 / 6);
+  });
+
   it('uses the same radar rectangle as pointer input for HUD drawing', () => {
     expect(calculateRadarHudRect(1000, 700)).toEqual(getRadarRect(1000, 700));
+  });
+
+  it('keeps HUD panels from overlapping on narrow mobile viewports', () => {
+    const layout = calculateResponsiveHudLayout(320, 568);
+
+    expect(layout.curvatureMeter.x + layout.curvatureMeter.width).toBeLessThanOrEqual(layout.torsionMeter.x);
+    expect(layout.minimap.x + layout.minimap.width).toBeLessThanOrEqual(layout.radar.x);
+    expect(layout.curvatureMeter.x).toBeGreaterThanOrEqual(0);
+    expect(layout.radar.x + layout.radar.width).toBeLessThanOrEqual(320);
+  });
+
+  it('keeps the responsive radar rectangle aligned with pointer input coordinates', () => {
+    expect(calculateResponsiveHudLayout(320, 568).radar).toEqual(getRadarRect(320, 568));
+  });
+
+  it('places compact status text below top meters on narrow viewports', () => {
+    const layout = calculateResponsiveHudLayout(320, 568);
+
+    expect(calculateStatusTextY(320, layout)).toBeGreaterThan(
+      Math.max(layout.curvatureMeter.y + layout.curvatureMeter.height, layout.torsionMeter.y + layout.torsionMeter.height),
+    );
   });
 
   it('projects minimap samples into a padded square while preserving nearest sample identity', () => {
@@ -77,5 +114,16 @@ describe('HUD overlay helpers', () => {
       direction: 1,
       opacity: 0,
     });
+  });
+
+  it('anchors the red orthogonal radar vector at the current steering endpoint', () => {
+    const vectors = calculateRadarVectors({ x: 0.5, y: 0.25 }, 100, 100, 50);
+
+    expect(vectors.blue.start).toEqual({ x: 100, y: 100 });
+    expect(vectors.blue.end.x).toBeCloseTo(125);
+    expect(vectors.blue.end.y).toBeCloseTo(87.5);
+    expect(vectors.red.start).toEqual(vectors.blue.end);
+    expect(vectors.red.end.x).toBeLessThan(vectors.red.start.x);
+    expect(vectors.red.end.y).toBeLessThan(vectors.red.start.y);
   });
 });

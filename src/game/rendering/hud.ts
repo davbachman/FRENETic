@@ -33,6 +33,23 @@ interface TorsionArc {
   opacity: number;
 }
 
+interface HudLayout {
+  curvatureMeter: Rect;
+  torsionMeter: Rect;
+  minimap: Rect;
+  radar: Rect;
+}
+
+interface RadarVector {
+  start: MinimapPoint;
+  end: MinimapPoint;
+}
+
+interface RadarVectors {
+  blue: RadarVector;
+  red: RadarVector;
+}
+
 const PANEL_FILL = 'rgba(2, 10, 18, 0.64)';
 const PANEL_STROKE = 'rgba(54, 243, 255, 0.62)';
 const GRID_STROKE = 'rgba(54, 243, 255, 0.16)';
@@ -86,8 +103,56 @@ export function calculateMeterGeometry(
   };
 }
 
+export function calculateSignedMeterGeometry(
+  value: number,
+  acceptableRange: [number, number],
+  maxMagnitude: number,
+): MeterGeometry {
+  const max = Math.max(1e-6, Math.abs(finiteOrZero(maxMagnitude)));
+  const start = Math.min(acceptableRange[0], acceptableRange[1]);
+  const end = Math.max(acceptableRange[0], acceptableRange[1]);
+  const normalize = (input: number): number => clamp01((finiteOrZero(input) + max) / (max * 2));
+
+  return {
+    indicator: normalize(value),
+    acceptableStart: normalize(start),
+    acceptableEnd: normalize(end),
+  };
+}
+
 export function calculateRadarHudRect(width: number, height: number): Rect {
   return getRadarRect(width, height);
+}
+
+export function calculateResponsiveHudLayout(width: number, height: number): HudLayout {
+  const minDimension = Math.min(width, height);
+  const margin = Math.max(8, Math.min(28, minDimension * 0.035));
+  const gap = Math.max(8, Math.min(18, width * 0.03));
+  const meterWidth = Math.min(300, Math.max(116, (width - margin * 2 - gap) / 2, width * 0.28));
+  const meterHeight = width < 380 ? 40 : 46;
+  const bottomGap = Math.max(8, Math.min(18, width * 0.035));
+  const radar = getRadarRect(width, height);
+  const minimapMaxWidth = Math.max(72, radar.x - margin - bottomGap);
+  const bottomSize = Math.min(230, Math.max(72, minDimension * 0.26), minimapMaxWidth);
+  const bottomY = height - Math.max(bottomSize, radar.height) - margin;
+
+  return {
+    curvatureMeter: { x: margin, y: 18, width: meterWidth, height: meterHeight },
+    torsionMeter: { x: width - margin - meterWidth, y: 18, width: meterWidth, height: meterHeight },
+    minimap: { x: margin, y: bottomY, width: bottomSize, height: bottomSize },
+    radar,
+  };
+}
+
+export function calculateStatusTextY(width: number, layout: HudLayout): number {
+  if (width < 560) {
+    return Math.max(
+      layout.curvatureMeter.y + layout.curvatureMeter.height,
+      layout.torsionMeter.y + layout.torsionMeter.height,
+    ) + 15;
+  }
+
+  return 31;
 }
 
 export function calculateMinimapProjection(
@@ -137,6 +202,27 @@ export function calculateTorsionArc(torsion: number, acceptableRange: [number, n
   return {
     direction: torsion < 0 ? -1 : 1,
     opacity: clamp01(Math.abs(finiteOrZero(torsion)) / maxMagnitude),
+  };
+}
+
+export function calculateRadarVectors(steering: Vec2, cx: number, cy: number, radius: number): RadarVectors {
+  const blueEnd = {
+    x: cx + steering.x * radius,
+    y: cy - steering.y * radius,
+  };
+  const redScale = radius * 0.74;
+  return {
+    blue: {
+      start: { x: cx, y: cy },
+      end: blueEnd,
+    },
+    red: {
+      start: blueEnd,
+      end: {
+        x: blueEnd.x - steering.y * redScale,
+        y: blueEnd.y - steering.x * redScale,
+      },
+    },
   };
 }
 
@@ -210,25 +296,21 @@ export class HudOverlay {
   }
 
   private drawMeters(game: GameState, simulation: SimulationState, width: number): void {
-    const margin = Math.max(16, Math.min(28, width * 0.025));
-    const meterWidth = Math.min(300, Math.max(180, width * 0.28));
-    const rectLeft = { x: margin, y: 18, width: meterWidth, height: 46 };
-    const rectRight = { x: width - margin - meterWidth, y: 18, width: meterWidth, height: 46 };
+    const layout = calculateResponsiveHudLayout(width, this.canvas.height);
     const curvatureMax = Math.max(
       game.level.acceptableCurvature[1] * 1.35,
       simulation.player.currentCurvature,
       0.75,
     );
-    const torsionMagnitude = Math.abs(simulation.player.currentTorsion);
     const torsionMax = Math.max(
       Math.abs(game.level.acceptableTorsion[0]),
       Math.abs(game.level.acceptableTorsion[1]),
-      torsionMagnitude,
+      Math.abs(simulation.player.currentTorsion),
       0.15,
     ) * 1.35;
 
     this.drawMeter(
-      rectLeft,
+      layout.curvatureMeter,
       'CURV',
       simulation.player.currentCurvature,
       game.level.acceptableCurvature,
@@ -236,12 +318,13 @@ export class HudOverlay {
       hudColors.blue,
     );
     this.drawMeter(
-      rectRight,
+      layout.torsionMeter,
       'TORS',
-      torsionMagnitude,
-      [0, Math.max(Math.abs(game.level.acceptableTorsion[0]), Math.abs(game.level.acceptableTorsion[1]))],
+      simulation.player.currentTorsion,
+      game.level.acceptableTorsion,
       torsionMax,
       hudColors.green,
+      true,
     );
   }
 
@@ -252,6 +335,7 @@ export class HudOverlay {
     acceptableRange: [number, number],
     maxValue: number,
     color: string,
+    signed = false,
   ): void {
     const ctx = this.ctx;
     this.drawPanel(rect);
@@ -261,7 +345,9 @@ export class HudOverlay {
       width: rect.width - 32,
       height: 9,
     };
-    const geometry = calculateMeterGeometry(value, acceptableRange, maxValue);
+    const geometry = signed
+      ? calculateSignedMeterGeometry(value, acceptableRange, maxValue)
+      : calculateMeterGeometry(value, acceptableRange, maxValue);
 
     ctx.save();
     ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace';
@@ -273,6 +359,11 @@ export class HudOverlay {
 
     ctx.fillStyle = 'rgba(255, 255, 255, 0.11)';
     ctx.fillRect(track.x, track.y, track.width, track.height);
+    if (signed) {
+      const center = track.x + track.width / 2;
+      ctx.fillStyle = 'rgba(218, 252, 255, 0.28)';
+      ctx.fillRect(center - 0.5, track.y - 3, 1, track.height + 6);
+    }
     ctx.fillStyle = 'rgba(112, 255, 157, 0.34)';
     ctx.fillRect(
       track.x + geometry.acceptableStart * track.width,
@@ -280,23 +371,31 @@ export class HudOverlay {
       Math.max(2, (geometry.acceptableEnd - geometry.acceptableStart) * track.width),
       track.height,
     );
-    const filled = geometry.indicator * track.width;
+    const indicatorX = track.x + geometry.indicator * track.width;
     const gradient = ctx.createLinearGradient(track.x, 0, track.x + track.width, 0);
     gradient.addColorStop(0, color);
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0.88)');
     ctx.fillStyle = gradient;
     ctx.shadowColor = color;
     ctx.shadowBlur = 8;
-    ctx.fillRect(track.x, track.y, filled, track.height);
+    if (signed) {
+      const centerX = track.x + track.width / 2;
+      ctx.fillRect(
+        Math.min(centerX, indicatorX),
+        track.y,
+        Math.max(1, Math.abs(indicatorX - centerX)),
+        track.height,
+      );
+    } else {
+      ctx.fillRect(track.x, track.y, geometry.indicator * track.width, track.height);
+    }
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(track.x + filled - 1, track.y - 4, 2, track.height + 8);
+    ctx.fillRect(indicatorX - 1, track.y - 4, 2, track.height + 8);
     ctx.restore();
   }
 
   private drawMinimap(simulation: SimulationState, width: number, height: number): void {
-    const size = Math.max(150, Math.min(230, Math.min(width, height) * 0.26));
-    const margin = Math.max(18, Math.min(width, height) * 0.035);
-    const rect = { x: margin, y: height - size - margin, width: size, height: size };
+    const rect = calculateResponsiveHudLayout(width, height).minimap;
     const projection = calculateMinimapProjection(
       simulation.sampled.samples,
       simulation.player.nearestSample,
@@ -336,7 +435,7 @@ export class HudOverlay {
   }
 
   private drawRadar(simulation: SimulationState, width: number, height: number): void {
-    const rect = calculateRadarHudRect(width, height);
+    const rect = calculateResponsiveHudLayout(width, height).radar;
     const ctx = this.ctx;
     const cx = rect.x + rect.width / 2;
     const cy = rect.y + rect.height / 2;
@@ -358,16 +457,12 @@ export class HudOverlay {
     ctx.lineTo(cx, cy + radius);
     ctx.stroke();
 
+    const vectors = calculateRadarVectors(simulation.player.smoothedSteering, cx, cy, radius);
     this.drawHistory(simulation.player.steeringHistory, cx, cy, radius);
-    this.drawVector(cx, cy, simulation.player.smoothedSteering, radius, hudColors.blue, 3);
+    this.drawVector(vectors.blue.start, vectors.blue.end, hudColors.blue, 3);
     this.drawVector(
-      cx,
-      cy,
-      {
-        x: -simulation.player.smoothedSteering.y,
-        y: simulation.player.smoothedSteering.x,
-      },
-      radius * 0.74,
+      vectors.red.start,
+      vectors.red.end,
       hudColors.red,
       2,
     );
@@ -395,17 +490,13 @@ export class HudOverlay {
   }
 
   private drawVector(
-    cx: number,
-    cy: number,
-    steering: Vec2,
-    radius: number,
+    start: MinimapPoint,
+    end: MinimapPoint,
     color: string,
     lineWidth: number,
   ): void {
     const ctx = this.ctx;
-    const endX = cx + steering.x * radius;
-    const endY = cy - steering.y * radius;
-    const angle = Math.atan2(cy - endY, endX - cx);
+    const angle = Math.atan2(start.y - end.y, end.x - start.x);
     const head = 8;
 
     ctx.save();
@@ -415,13 +506,13 @@ export class HudOverlay {
     ctx.shadowBlur = 10;
     ctx.lineWidth = lineWidth;
     ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(endX, endY);
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(endX, endY);
-    ctx.lineTo(endX - Math.cos(angle - 0.52) * head, endY + Math.sin(angle - 0.52) * head);
-    ctx.lineTo(endX - Math.cos(angle + 0.52) * head, endY + Math.sin(angle + 0.52) * head);
+    ctx.moveTo(end.x, end.y);
+    ctx.lineTo(end.x - Math.cos(angle - 0.52) * head, end.y + Math.sin(angle - 0.52) * head);
+    ctx.lineTo(end.x - Math.cos(angle + 0.52) * head, end.y + Math.sin(angle + 0.52) * head);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
@@ -459,6 +550,7 @@ export class HudOverlay {
 
   private drawStatus(game: GameState, simulation: SimulationState, width: number, height: number): void {
     const ctx = this.ctx;
+    const statusY = calculateStatusTextY(width, calculateResponsiveHudLayout(width, height));
     ctx.save();
     ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.fillStyle = TEXT;
@@ -466,7 +558,7 @@ export class HudOverlay {
     ctx.fillText(
       `${game.levelIndex + 1}/${game.levels.length} ${game.level.name}  ${(simulation.player.progress * 100).toFixed(0)}%  H:${Math.round(simulation.player.health * 100)}`,
       width / 2,
-      31,
+      statusY,
     );
 
     const message = this.modeMessage(game.mode);

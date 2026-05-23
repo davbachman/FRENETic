@@ -16,3 +16,4 @@ Task 10 notes:
 - Implemented HudOverlay with canvas texture, top blue/green meters, bottom-left minimap, pointer-aligned radar, compact status text, and renderer same-canvas overlay pass.
 - Verification: targeted HUD tests, full Vitest suite, typecheck, and production build pass. Playwright screenshots written under /private/tmp/frenetic-task10-hud and /private/tmp/frenetic-task10-hud-playing.
 - Browser note: start-mode screenshot shows tunnel rings plus HUD. Playing-mode HUD remains visible and reports steering history; the pre-existing Task 9 camera/simulation drift can still leave the tunnel out of view after several frames.
+- Task 10 review fix: preserved signed torsion in the top-right meter, kept mobile HUD panels/text separated at 320x568 without changing pointer-aligned radar coordinates, and anchored the red radar vector at the current steering endpoint. Added helper tests for each review finding.
