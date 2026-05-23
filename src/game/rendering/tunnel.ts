@@ -1,7 +1,6 @@
 import {
   BufferAttribute,
   BufferGeometry,
-  Color,
   Group,
   LineBasicMaterial,
   LineLoop,
@@ -87,8 +86,6 @@ export class TunnelRings {
     if (samples.length === 0) {
       return;
     }
-
-    const color = new Color(level.visual.ringColor);
     const sampleStride = Math.max(1, Math.floor(samples.length / (RING_COUNT * 4)));
     const startIndex = simulation.player.nearestSample.index;
 
@@ -110,7 +107,6 @@ export class TunnelRings {
         geometry.computeBoundingSphere();
 
         const material = ring.material as LineBasicMaterial;
-        material.color.copy(color);
         material.opacity = Math.max(MIN_OPACITY * layer.opacityScale, baseOpacity * layer.opacityScale);
         material.needsUpdate = true;
       }

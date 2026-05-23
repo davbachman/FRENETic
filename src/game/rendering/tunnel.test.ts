@@ -113,7 +113,7 @@ describe('TunnelRings', () => {
     expect(wrappedCenter.x).toBeCloseTo(simulation.sampled.samples[1].position.x, 5);
 
     const material = firstRing.material as LineBasicMaterial;
-    expect(material.color.getStyle()).toBe('rgb(255,0,170)');
+    expect(material.color.getStyle()).toBe('rgb(54,243,255)');
     expect(material.opacity).toBeGreaterThanOrEqual(0.08);
 
     tunnel.dispose();
@@ -171,7 +171,7 @@ describe('TunnelRings', () => {
 
     expect(nearCore.opacity).toBeGreaterThan(nearOuterHalo.opacity);
     expect(nearCore.opacity).toBeGreaterThan(farCore.opacity);
-    expect(nearCore.color.getStyle()).toBe('rgb(255,0,170)');
+    expect(nearCore.color.getStyle()).toBe('rgb(54,243,255)');
 
     tunnel.dispose();
   });
