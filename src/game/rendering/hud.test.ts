@@ -70,6 +70,31 @@ describe('HUD overlay helpers', () => {
     expect(calculateResponsiveHudLayout(320, 568).radar).toEqual(getRadarRect(320, 568));
   });
 
+  it('reserves cinematic top meter space on desktop viewports', () => {
+    const layout = calculateResponsiveHudLayout(1440, 900);
+
+    expect(layout.curvatureMeter.height).toBeGreaterThanOrEqual(78);
+    expect(layout.torsionMeter.height).toBe(layout.curvatureMeter.height);
+    expect(layout.curvatureMeter.width).toBeGreaterThanOrEqual(360);
+    expect(layout.torsionMeter.x).toBeGreaterThan(layout.curvatureMeter.x + layout.curvatureMeter.width);
+    expect(layout.curvatureMeter.y).toBeGreaterThanOrEqual(16);
+  });
+
+  it('keeps core HUD panels separated on compact screens after cinematic sizing', () => {
+    const layout = calculateResponsiveHudLayout(320, 568);
+    const topMeterBottom = Math.max(
+      layout.curvatureMeter.y + layout.curvatureMeter.height,
+      layout.torsionMeter.y + layout.torsionMeter.height,
+    );
+
+    expect(layout.curvatureMeter.x + layout.curvatureMeter.width).toBeLessThanOrEqual(layout.torsionMeter.x);
+    expect(layout.minimap.x + layout.minimap.width).toBeLessThanOrEqual(layout.radar.x);
+    expect(layout.minimap.y).toBeGreaterThan(topMeterBottom + 180);
+    expect(layout.minimap.width).toBeGreaterThanOrEqual(96);
+    expect(layout.radar.width).toBeGreaterThanOrEqual(168);
+    expect(layout.radar.x + layout.radar.width).toBeLessThanOrEqual(320);
+  });
+
   it('places compact status text below top meters on narrow viewports', () => {
     const layout = calculateResponsiveHudLayout(320, 568);
 
