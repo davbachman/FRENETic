@@ -25,6 +25,29 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+function tangentDerivativeFor(
+  tangents: Vector3[],
+  normals: Vector3[],
+  segmentLengths: number[],
+  index: number,
+  curvature: number,
+): Vector3 {
+  const previous = wrap(index - 1, tangents.length);
+  const next = wrap(index + 1, tangents.length);
+  const tangent = tangents[index];
+  const derivative = tangents[next]
+    .clone()
+    .sub(tangents[previous])
+    .multiplyScalar(1 / Math.max(segmentLengths[previous] + segmentLengths[index], 1e-6));
+  const projected = derivative.sub(tangent.clone().multiplyScalar(derivative.dot(tangent)));
+
+  if (projected.lengthSq() < 1e-12 || curvature <= 1e-8) {
+    return normals[index].clone().multiplyScalar(curvature);
+  }
+
+  return projected.normalize().multiplyScalar(curvature);
+}
+
 function stableTorsionFor(
   level: LevelDefinition,
   numerator: number,
@@ -109,6 +132,7 @@ export function sampleLevelCurve(level: LevelDefinition): SampledCurve {
       tangent: tangents[index].clone(),
       normal: normals[index].clone(),
       binormal: binormals[index].clone(),
+      tangentDerivative: tangentDerivativeFor(tangents, normals, segmentLengths, index, curvature),
       curvature,
       torsion,
       arcLength: arcLengths[index],

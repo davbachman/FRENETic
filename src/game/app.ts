@@ -1,9 +1,8 @@
 import { authoredLevels } from './curves/levels';
 import { sampleLevelCurve } from './curves/sampler';
-import { PointerTrackpad } from './input/pointerTrackpad';
-import { createSimulationState, updateSimulation } from './simulation/player';
+import { createSimulationState, updateDemoSimulation } from './simulation/player';
 import type { SimulationConfig, SimulationState } from './simulation/types';
-import { createGameState, nextLevel, restartLevel, setMode, updateProgressMode } from './state/gameState';
+import { createGameState } from './state/gameState';
 import type { GameState } from './state/gameState';
 import { buildTextState } from './testing/textState';
 
@@ -15,13 +14,8 @@ export interface RendererLike {
 
 const FIXED_STEP = 1 / 60;
 
-const DEFAULT_CONFIG: SimulationConfig = {
-  steeringResponseSeconds: 0.18,
-  maxCurvature: 0.75,
+export const DEFAULT_CONFIG: SimulationConfig = {
   maxHistorySeconds: 3,
-  recoveryPerSecond: 0.12,
-  damagePerSecond: 0.45,
-  warningDistanceRatio: 0.72,
 };
 
 export class FreneticApp {
@@ -31,16 +25,13 @@ export class FreneticApp {
   private accumulator = 0;
   private running = false;
   private lastTime = 0;
-  private trackpad: PointerTrackpad | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly renderer: RendererLike,
     private readonly config: SimulationConfig = DEFAULT_CONFIG,
   ) {
-    if (typeof window !== 'undefined' && 'addEventListener' in canvas) {
-      this.trackpad = new PointerTrackpad(canvas);
-      window.addEventListener('keydown', this.onKeyDown);
+    if (typeof window !== 'undefined') {
       window.addEventListener('resize', this.onResize);
     }
     this.onResize();
@@ -58,20 +49,6 @@ export class FreneticApp {
     }
   }
 
-  startPlaying(): void {
-    setMode(this.game, 'playing');
-  }
-
-  restartLevel(): void {
-    restartLevel(this.game);
-    this.resetSimulation();
-  }
-
-  nextLevel(): void {
-    nextLevel(this.game);
-    this.resetSimulation();
-  }
-
   advanceTime(ms: number): void {
     if (!Number.isFinite(ms) || ms <= 0) {
       return;
@@ -87,27 +64,20 @@ export class FreneticApp {
     return buildTextState(this.game, this.simulation);
   }
 
+  resize(): void {
+    this.onResize();
+  }
+
   dispose(): void {
     this.running = false;
-    this.trackpad?.destroy();
     if (typeof window !== 'undefined') {
-      window.removeEventListener('keydown', this.onKeyDown);
       window.removeEventListener('resize', this.onResize);
     }
     this.renderer.dispose();
   }
 
-  private resetSimulation(): void {
-    this.sampled = sampleLevelCurve(this.game.level);
-    this.simulation = createSimulationState(this.sampled);
-    this.accumulator = 0;
-  }
-
   private step(dt: number): void {
-    if (this.game.mode === 'playing') {
-      updateSimulation(this.simulation, this.trackpad?.getSteering() ?? { x: 0, y: 0 }, dt, this.config);
-      updateProgressMode(this.game, this.simulation.player.progress, this.simulation.player.health);
-    }
+    updateDemoSimulation(this.simulation, dt, this.config);
   }
 
   private drainAccumulator(): void {
@@ -135,29 +105,5 @@ export class FreneticApp {
     const width = Math.max(1, this.canvas.clientWidth || (typeof window === 'undefined' ? 800 : window.innerWidth));
     const height = Math.max(1, this.canvas.clientHeight || (typeof window === 'undefined' ? 600 : window.innerHeight));
     this.renderer.resize(width, height);
-  };
-
-  private onKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === 'Enter' && this.game.mode === 'start') {
-      this.startPlaying();
-    } else if (event.key === 'Escape') {
-      if (document.fullscreenElement) {
-        void document.exitFullscreen();
-      } else if (this.game.mode === 'paused') {
-        setMode(this.game, 'playing');
-      }
-    } else if (event.key.toLowerCase() === 'r') {
-      this.restartLevel();
-    } else if (event.key.toLowerCase() === 'n' || event.key.toLowerCase() === 'b') {
-      this.nextLevel();
-    } else if (event.key.toLowerCase() === 'p') {
-      setMode(this.game, this.game.mode === 'paused' ? 'playing' : 'paused');
-    } else if (event.key.toLowerCase() === 'f') {
-      if (document.fullscreenElement) {
-        void document.exitFullscreen();
-      } else {
-        void this.canvas.requestFullscreen?.();
-      }
-    }
   };
 }

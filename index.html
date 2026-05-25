@@ -6,7 +6,24 @@
     <title>FRENETic</title>
   </head>
   <body>
-    <canvas id="game-canvas" aria-label="FRENETic game canvas"></canvas>
+    <main id="app-shell" aria-label="FRENETic curvature and torsion demo">
+      <canvas id="game-canvas" aria-label="FRENETic visualization canvas"></canvas>
+      <button
+        id="fullscreen-button"
+        class="fullscreen-button"
+        type="button"
+        aria-label="Toggle fullscreen"
+        aria-pressed="false"
+        title="Toggle fullscreen"
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M4 9V4h5" />
+          <path d="M20 9V4h-5" />
+          <path d="M4 15v5h5" />
+          <path d="M20 15v5h-5" />
+        </svg>
+      </button>
+    </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

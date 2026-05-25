@@ -1,5 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { BufferGeometry, Group, LineBasicMaterial, LineLoop, Vector3 } from 'three';
+import {
+  AdditiveBlending,
+  BufferAttribute,
+  BufferGeometry,
+  DoubleSide,
+  Group,
+  InterleavedBufferAttribute,
+  Mesh,
+  MeshBasicMaterial,
+  Vector3,
+} from 'three';
 import type { CurveSample, LevelDefinition, SampledCurve } from '../curves/types';
 import type { SimulationState } from '../simulation/types';
 import { TunnelRings } from './tunnel';
@@ -28,7 +38,6 @@ function makeSimulation(nearestIndex = 3): SimulationState {
     acceptableCurvature: [0, 1],
     acceptableTorsion: [-1, 1],
     curve: () => new Vector3(),
-    visual: { ringColor: '#ff00aa', fogColor: '#000000' },
   };
   const sampled: SampledCurve = {
     level,
@@ -45,49 +54,84 @@ function makeSimulation(nearestIndex = 3): SimulationState {
       tangent: nearestSample.tangent.clone(),
       normal: nearestSample.normal.clone(),
       binormal: nearestSample.binormal.clone(),
-      rawSteering: { x: 0, y: 0 },
-      smoothedSteering: { x: 0, y: 0 },
       currentCurvature: 0,
       currentTorsion: 0,
-      previousCurvatureDirection: { x: 0, y: 0 },
-      health: 1,
-      warning: 0,
-      damageFlash: 0,
       progress: nearestIndex / sampled.samples.length,
       nearestSample,
-      distanceFromCenterline: 0,
-      steeringHistory: [],
+      invariantHistory: [],
     },
   };
 }
 
-function ringLayers(tunnel: TunnelRings, ringIndex: number): LineLoop[] {
-  const ringGroup = tunnel.group.children[ringIndex] as Group;
-  return ringGroup.children as LineLoop[];
+function ringBands(tunnel: TunnelRings, ringIndex: number): Mesh[] {
+  const ringGroup = tunnel.group.children.filter((child) => child.type === 'Group')[ringIndex] as Group;
+  return ringGroup.children as Mesh[];
+}
+
+function tunnelWall(tunnel: TunnelRings): Mesh {
+  return tunnel.group.children.find((child) => child.type === 'Mesh') as Mesh;
+}
+
+function attributeCentroid(attribute: BufferAttribute | InterleavedBufferAttribute): Vector3 {
+  const center = new Vector3();
+  for (let index = 0; index < attribute.count; index += 1) {
+    center.add(new Vector3().fromBufferAttribute(attribute, index));
+  }
+  return center.multiplyScalar(1 / Math.max(1, attribute.count));
 }
 
 describe('TunnelRings', () => {
-  it('creates 46 initially hidden volumetric ring groups with preallocated line layers', () => {
+  it('creates many initially hidden ring groups with preallocated thicker neon rim strips', () => {
     const tunnel = new TunnelRings();
 
-    expect(tunnel.group.children).toHaveLength(46);
-    for (const child of tunnel.group.children) {
+    const ringGroups = tunnel.group.children.filter((child) => child.type === 'Group');
+    expect(ringGroups).toHaveLength(78);
+    for (const child of ringGroups) {
       expect(child.type).toBe('Group');
       const group = child as Group;
       expect(group.children).toHaveLength(3);
-      for (const layer of group.children as LineLoop[]) {
-        expect(layer.type).toBe('LineLoop');
-        const geometry = layer.geometry as BufferGeometry;
-        const material = layer.material as LineBasicMaterial;
+      for (const band of group.children as Mesh[]) {
+        expect(band.type).toBe('Mesh');
+        const geometry = band.geometry as BufferGeometry;
+        const material = band.material as MeshBasicMaterial;
         const position = geometry.getAttribute('position');
         expect(position).toBeDefined();
-        expect(position.count).toBe(64);
+        expect(position.count).toBe(64 * 2);
+        expect(geometry.index?.count).toBe(64 * 6);
         expect(geometry.drawRange.count).toBe(0);
         expect(material.transparent).toBe(true);
         expect(material.depthWrite).toBe(false);
+        expect(material.blending).toBe(AdditiveBlending);
+        expect(material.side).toBe(DoubleSide);
         expect(material.opacity).toBeGreaterThan(0);
       }
     }
+
+    tunnel.dispose();
+  });
+
+  it('creates a dark opaque tunnel wall surface behind the neon rims', () => {
+    const tunnel = new TunnelRings();
+    const wall = tunnelWall(tunnel);
+    const geometry = wall.geometry as BufferGeometry;
+    const material = wall.material as MeshBasicMaterial;
+
+    expect(wall).toBeDefined();
+    expect(geometry.getAttribute('position').count).toBeGreaterThan(64 * 20);
+    expect(geometry.index?.count).toBeGreaterThan(64 * 20 * 3);
+    expect(geometry.drawRange.count).toBe(0);
+    expect(material.color.getStyle()).toBe('rgb(3,11,17)');
+    expect(material.transparent).toBe(false);
+    expect(material.depthWrite).toBe(true);
+    expect(material.side).toBe(DoubleSide);
+
+    tunnel.dispose();
+  });
+
+  it('does not cap the far tunnel aperture with a fill mesh', () => {
+    const tunnel = new TunnelRings();
+
+    expect(tunnel.group.children.filter((child) => child.type === 'Mesh')).toHaveLength(1);
 
     tunnel.dispose();
   });
@@ -98,23 +142,29 @@ describe('TunnelRings', () => {
 
     tunnel.update(simulation);
 
-    const firstRing = ringLayers(tunnel, 0)[0];
-    const firstPositions = (firstRing.geometry as BufferGeometry).getAttribute('position');
-    const firstCenter = new Vector3().fromBufferAttribute(firstPositions, 0);
-    expect(firstCenter.x).toBeCloseTo(simulation.sampled.samples[10].position.x, 5);
-    expect(firstCenter.distanceTo(simulation.sampled.samples[10].position)).toBeCloseTo(
-      simulation.sampled.level.tubeRadius,
-      5,
-    );
+    const wallGeometry = tunnelWall(tunnel).geometry as BufferGeometry;
+    expect(wallGeometry.drawRange.count).toBeGreaterThan(64 * 20 * 3);
 
-    const wrappedRing = ringLayers(tunnel, 3)[0];
+    const firstRing = ringBands(tunnel, 0)[0];
+    const firstPositions = (firstRing.geometry as BufferGeometry).getAttribute('position');
+    const firstCenter = attributeCentroid(firstPositions);
+    const radialDistances = Array.from({ length: firstPositions.count }, (_, index) =>
+      new Vector3().fromBufferAttribute(firstPositions, index).distanceTo(firstCenter),
+    );
+    expect(firstCenter.x).toBeCloseTo(simulation.sampled.samples[10].position.x, 5);
+    const coreWidth = Math.max(...radialDistances) - Math.min(...radialDistances);
+    expect(coreWidth).toBeGreaterThan(0.045);
+    expect(coreWidth).toBeLessThan(0.09);
+
+    const wrappedRing = ringBands(tunnel, 3)[0];
     const wrappedPositions = (wrappedRing.geometry as BufferGeometry).getAttribute('position');
-    const wrappedCenter = new Vector3().fromBufferAttribute(wrappedPositions, 0);
+    const wrappedCenter = attributeCentroid(wrappedPositions);
     expect(wrappedCenter.x).toBeCloseTo(simulation.sampled.samples[1].position.x, 5);
 
-    const material = firstRing.material as LineBasicMaterial;
-    expect(material.color.getStyle()).toBe('rgb(54,243,255)');
-    expect(material.opacity).toBeGreaterThanOrEqual(0.08);
+    const material = firstRing.material as MeshBasicMaterial;
+    expect(material.color.getStyle()).toBe('rgb(255,159,47)');
+    expect(material.opacity).toBeGreaterThanOrEqual(0.32);
+    expect(material.opacity).toBeLessThan(0.55);
 
     tunnel.dispose();
   });
@@ -125,7 +175,7 @@ describe('TunnelRings', () => {
     const secondSimulation = makeSimulation(4);
 
     tunnel.update(firstSimulation);
-    const firstLayerState = ringLayers(tunnel, 0).map((ring) => {
+    const firstBandState = ringBands(tunnel, 0).map((ring) => {
       const geometry = ring.geometry as BufferGeometry;
       const attribute = geometry.getAttribute('position');
       return {
@@ -137,23 +187,82 @@ describe('TunnelRings', () => {
     });
 
     tunnel.update(secondSimulation);
-    const updatedSample = secondSimulation.sampled.samples[4];
-    const layerDistances = firstLayerState.map(({ geometry, attribute, array, firstX }) => {
+    const visibleSample = secondSimulation.sampled.samples[4];
+    const bandState = firstBandState.map(({ geometry, attribute, array, firstX }) => {
       const secondAttribute = geometry.getAttribute('position');
-      const firstPoint = new Vector3().fromBufferAttribute(secondAttribute, 0);
+      const ringCenter = attributeCentroid(secondAttribute);
+      const rimPoint = new Vector3().fromBufferAttribute(secondAttribute, 0);
+      const radialDistances = Array.from({ length: secondAttribute.count }, (_, index) =>
+        new Vector3().fromBufferAttribute(secondAttribute, index).distanceTo(ringCenter),
+      );
 
       expect(secondAttribute).toBe(attribute);
       expect(secondAttribute.array).toBe(array);
       expect(secondAttribute.array[0]).not.toBe(firstX);
-      expect(secondAttribute.array[0]).toBeCloseTo(updatedSample.position.x, 5);
-      expect(geometry.drawRange.count).toBe(64);
+      expect(secondAttribute.array[0]).toBeCloseTo(visibleSample.position.x, 5);
+      expect(geometry.drawRange.count).toBe(64 * 6);
 
-      return firstPoint.distanceTo(updatedSample.position);
+      return {
+        radius: rimPoint.distanceTo(visibleSample.position),
+        radialWidth: Math.max(...radialDistances) - Math.min(...radialDistances),
+      };
     });
 
-    expect(layerDistances[0]).toBeCloseTo(secondSimulation.sampled.level.tubeRadius, 5);
-    expect(layerDistances[1]).toBeLessThan(layerDistances[0] - 0.05);
-    expect(layerDistances[2]).toBeGreaterThan(layerDistances[0] + 0.05);
+    expect(bandState[0].radius).toBeGreaterThan(secondSimulation.sampled.level.tubeRadius - 0.1);
+    expect(bandState[0].radialWidth).toBeGreaterThan(0.045);
+    expect(bandState[0].radialWidth).toBeLessThan(0.09);
+    expect(bandState[1].radialWidth).toBeGreaterThan(bandState[0].radialWidth);
+    expect(bandState[2].radialWidth).toBeGreaterThan(bandState[1].radialWidth);
+
+    tunnel.dispose();
+  });
+
+  it('keeps ring geometry on the same world lattice within a spacing interval', () => {
+    const tunnel = new TunnelRings();
+    const firstSimulation = makeSimulation(3);
+    const secondSimulation = makeSimulation(3);
+    firstSimulation.player.progress = 3.1 / firstSimulation.sampled.samples.length;
+    secondSimulation.player.progress = 3.6 / secondSimulation.sampled.samples.length;
+
+    tunnel.update(firstSimulation);
+    const firstCenter = attributeCentroid(
+      (ringBands(tunnel, 0)[0].geometry as BufferGeometry).getAttribute('position'),
+    );
+
+    tunnel.update(secondSimulation);
+    const secondCenter = attributeCentroid(
+      (ringBands(tunnel, 0)[0].geometry as BufferGeometry).getAttribute('position'),
+    );
+
+    expect(secondCenter.x).toBeCloseTo(firstCenter.x, 5);
+    expect(secondCenter.distanceTo(firstCenter)).toBeLessThan(0.01);
+
+    tunnel.dispose();
+  });
+
+  it('anchors ring spacing so rings move toward the camera between lattice resets', () => {
+    const tunnel = new TunnelRings();
+    const firstSimulation = makeSimulation(3);
+    const secondSimulation = makeSimulation(3);
+    firstSimulation.player.progress = 3.1 / firstSimulation.sampled.samples.length;
+    secondSimulation.player.progress = 3.6 / secondSimulation.sampled.samples.length;
+    firstSimulation.player.position.setX(31);
+    secondSimulation.player.position.setX(36);
+
+    tunnel.update(firstSimulation);
+    const firstCenter = attributeCentroid(
+      (ringBands(tunnel, 0)[0].geometry as BufferGeometry).getAttribute('position'),
+    );
+
+    tunnel.update(secondSimulation);
+    const secondCenter = attributeCentroid(
+      (ringBands(tunnel, 0)[0].geometry as BufferGeometry).getAttribute('position'),
+    );
+
+    const firstDistanceAhead = firstCenter.x - firstSimulation.player.position.x;
+    const secondDistanceAhead = secondCenter.x - secondSimulation.player.position.x;
+
+    expect(secondDistanceAhead).toBeLessThan(firstDistanceAhead - 2);
 
     tunnel.dispose();
   });
@@ -163,15 +272,17 @@ describe('TunnelRings', () => {
 
     tunnel.update(makeSimulation());
 
-    const nearLayers = ringLayers(tunnel, 0);
-    const farLayers = ringLayers(tunnel, tunnel.group.children.length - 1);
-    const nearCore = nearLayers[0].material as LineBasicMaterial;
-    const nearOuterHalo = nearLayers[2].material as LineBasicMaterial;
-    const farCore = farLayers[0].material as LineBasicMaterial;
+    const nearBands = ringBands(tunnel, 0);
+    const farBands = ringBands(tunnel, tunnel.group.children.filter((child) => child.type === 'Group').length - 1);
+    const nearCore = nearBands[0].material as MeshBasicMaterial;
+    const nearOuterHalo = nearBands[2].material as MeshBasicMaterial;
+    const farCore = farBands[0].material as MeshBasicMaterial;
 
     expect(nearCore.opacity).toBeGreaterThan(nearOuterHalo.opacity);
     expect(nearCore.opacity).toBeGreaterThan(farCore.opacity);
-    expect(nearCore.color.getStyle()).toBe('rgb(54,243,255)');
+    expect(nearCore.opacity).toBeGreaterThan(0.32);
+    expect(farCore.opacity).toBeGreaterThanOrEqual(0.06);
+    expect(nearCore.color.getStyle()).toBe('rgb(255,159,47)');
 
     tunnel.dispose();
   });
@@ -180,18 +291,26 @@ describe('TunnelRings', () => {
     const tunnel = new TunnelRings();
     tunnel.update(makeSimulation());
 
-    const layers = tunnel.group.children.flatMap((child) => (child as Group).children as LineLoop[]);
-    const geometryDispose = layers.map((layer) =>
-      vi.spyOn(layer.geometry as BufferGeometry, 'dispose'),
+    const wall = tunnelWall(tunnel);
+    const bands = tunnel.group.children
+      .filter((child) => child.type === 'Group')
+      .flatMap((child) => (child as Group).children as Mesh[]);
+    const geometryDispose = bands.map((band) =>
+      vi.spyOn(band.geometry as BufferGeometry, 'dispose'),
     );
-    const materialDispose = layers.map((layer) =>
-      vi.spyOn(layer.material as LineBasicMaterial, 'dispose'),
+    const materialDispose = bands.map((band) =>
+      vi.spyOn(band.material as MeshBasicMaterial, 'dispose'),
     );
+
+    const wallGeometryDispose = vi.spyOn(wall.geometry as BufferGeometry, 'dispose');
+    const wallMaterialDispose = vi.spyOn(wall.material as MeshBasicMaterial, 'dispose');
 
     tunnel.dispose();
 
     for (const dispose of [...geometryDispose, ...materialDispose]) {
       expect(dispose).toHaveBeenCalledOnce();
     }
+    expect(wallGeometryDispose).toHaveBeenCalledOnce();
+    expect(wallMaterialDispose).toHaveBeenCalledOnce();
   });
 });

@@ -1,30 +1,20 @@
 import { Vector3 } from 'three';
-import type { SampledCurve } from '../curves/types';
-import { clampSteering, smoothSteering } from './smoothing';
-import { updateCollision } from './collision';
-import type { SimulationConfig, SimulationState, Vec2 } from './types';
+import type { CurveSample, SampledCurve } from '../curves/types';
+import type { SimulationConfig, SimulationState } from './types';
 
 const SCREEN_UP = new Vector3(0, 0, 1);
 const FALLBACK_UP = new Vector3(0, 1, 0);
 const FALLBACK_RIGHT = new Vector3(1, 0, 0);
 
-function clampUnit(value: number): number {
-  return Math.max(-1, Math.min(1, value));
+export interface ArcLengthFrame extends Pick<CurveSample, 'position' | 'tangent' | 'normal' | 'binormal'> {
+  sample: CurveSample;
+  progress: number;
+  curvature: number;
+  torsion: number;
 }
 
-function signedSteeringTurn(previous: Vec2, current: Vec2, dt: number): number {
-  const previousLength = Math.hypot(previous.x, previous.y);
-  const currentLength = Math.hypot(current.x, current.y);
-
-  if (previousLength < 1e-4 || currentLength < 1e-4) {
-    return 0;
-  }
-
-  const lengthProduct = previousLength * currentLength;
-  const normalizedDot = clampUnit((previous.x * current.x + previous.y * current.y) / lengthProduct);
-  const normalizedCross = clampUnit((previous.x * current.y - previous.y * current.x) / lengthProduct);
-  const angle = Math.atan2(normalizedCross, normalizedDot);
-  return angle / Math.max(dt, 1e-6);
+function wrap(value: number, length: number): number {
+  return ((value % length) + length) % length;
 }
 
 function fallbackNormalFor(tangent: Vector3): Vector3 {
@@ -37,15 +27,39 @@ function fallbackNormalFor(tangent: Vector3): Vector3 {
   return source.clone().sub(tangent.clone().multiplyScalar(source.dot(tangent))).normalize();
 }
 
-function rebuildFrame(state: SimulationState): void {
-  const transportedNormal = state.player.normal
-    .clone()
-    .sub(state.player.tangent.clone().multiplyScalar(state.player.normal.dot(state.player.tangent)));
+export function sampleAtArcLength(sampled: SampledCurve, arcLength: number): ArcLengthFrame {
+  const { samples, totalLength } = sampled;
+  if (samples.length === 0 || totalLength <= 0) {
+    throw new Error('Cannot sample an empty curve.');
+  }
 
-  state.player.normal.copy(
-    transportedNormal.lengthSq() > 1e-8 ? transportedNormal.normalize() : fallbackNormalFor(state.player.tangent),
-  );
-  state.player.binormal.copy(state.player.tangent.clone().cross(state.player.normal).normalize());
+  const wrappedArcLength = wrap(arcLength, totalLength);
+  let index = 0;
+  while (index < samples.length - 1 && samples[index + 1].arcLength <= wrappedArcLength) {
+    index += 1;
+  }
+
+  const current = samples[index];
+  const next = samples[(index + 1) % samples.length];
+  const nextArcLength = index === samples.length - 1 ? totalLength : next.arcLength;
+  const amount = (wrappedArcLength - current.arcLength) / Math.max(nextArcLength - current.arcLength, 1e-6);
+  const tangent = current.tangent.clone().lerp(next.tangent, amount).normalize();
+  const blendedNormal = current.normal.clone().lerp(next.normal, amount);
+  const transportedNormal = blendedNormal.sub(tangent.clone().multiplyScalar(blendedNormal.dot(tangent)));
+  const normal = transportedNormal.lengthSq() > 1e-8
+    ? transportedNormal.normalize()
+    : fallbackNormalFor(tangent);
+
+  return {
+    sample: current,
+    progress: wrappedArcLength / totalLength,
+    position: current.position.clone().lerp(next.position, amount),
+    tangent,
+    normal,
+    binormal: tangent.clone().cross(normal).normalize(),
+    curvature: current.curvature + (next.curvature - current.curvature) * amount,
+    torsion: current.torsion + (next.torsion - current.torsion) * amount,
+  };
 }
 
 export function createSimulationState(sampled: SampledCurve): SimulationState {
@@ -58,76 +72,50 @@ export function createSimulationState(sampled: SampledCurve): SimulationState {
       tangent: first.tangent.clone(),
       normal: first.normal.clone(),
       binormal: first.binormal.clone(),
-      rawSteering: { x: 0, y: 0 },
-      smoothedSteering: { x: 0, y: 0 },
       currentCurvature: 0,
       currentTorsion: 0,
-      previousCurvatureDirection: { x: 0, y: 0 },
-      health: 1,
-      warning: 0,
-      damageFlash: 0,
       progress: 0,
       nearestSample: first,
-      distanceFromCenterline: 0,
-      steeringHistory: [],
+      invariantHistory: [],
     },
   };
 }
 
-export function updateSimulation(
-  state: SimulationState,
-  rawSteering: Vec2,
-  dt: number,
-  config: SimulationConfig,
-): void {
-  const clamped = clampSteering(rawSteering);
-  const previousSmoothed = state.player.smoothedSteering;
-  const smoothed = smoothSteering(
-    previousSmoothed,
-    clamped,
-    dt,
-    config.steeringResponseSeconds,
-  );
-
-  state.player.rawSteering = { ...clamped };
-  state.player.smoothedSteering = { ...smoothed };
-  state.player.currentCurvature = Math.hypot(smoothed.x, smoothed.y) * config.maxCurvature;
-  state.player.currentTorsion = signedSteeringTurn(
-    state.player.previousCurvatureDirection,
-    smoothed,
-    dt,
-  );
-  state.player.previousCurvatureDirection = { ...smoothed };
-
-  const curvatureDirection = state.player.binormal
-    .clone()
-    .multiplyScalar(smoothed.x)
-    .add(state.player.normal.clone().multiplyScalar(smoothed.y));
-
-  if (curvatureDirection.lengthSq() > 1e-8) {
-    curvatureDirection.normalize().multiplyScalar(state.player.currentCurvature * state.sampled.level.speed * dt);
-    state.player.tangent.add(curvatureDirection).normalize();
-    rebuildFrame(state);
-  }
-
-  state.player.position.add(state.player.tangent.clone().multiplyScalar(state.sampled.level.speed * dt));
-  state.elapsed += dt;
-
-  updateCollision(state.player, state.sampled, dt, config);
-
-  for (const point of state.player.steeringHistory) {
+function recordInvariantHistory(state: SimulationState, dt: number, maxHistorySeconds: number): void {
+  for (const point of state.player.invariantHistory) {
     point.age += dt;
   }
 
-  state.player.steeringHistory.unshift({
+  state.player.invariantHistory.unshift({
     age: 0,
-    raw: { ...clamped },
-    smoothed: { ...smoothed },
     curvature: state.player.currentCurvature,
     torsion: state.player.currentTorsion,
   });
 
-  state.player.steeringHistory = state.player.steeringHistory.filter(
-    (point) => point.age <= config.maxHistorySeconds,
+  state.player.invariantHistory = state.player.invariantHistory.filter(
+    (point) => point.age <= maxHistorySeconds,
   );
+}
+
+export function updateDemoSimulation(
+  state: SimulationState,
+  dt: number,
+  config: SimulationConfig,
+): void {
+  if (!Number.isFinite(dt) || dt <= 0) {
+    return;
+  }
+
+  state.elapsed += dt;
+  const frame = sampleAtArcLength(state.sampled, state.elapsed * state.sampled.level.speed);
+
+  state.player.position.copy(frame.position);
+  state.player.tangent.copy(frame.tangent);
+  state.player.normal.copy(frame.normal);
+  state.player.binormal.copy(frame.binormal);
+  state.player.currentCurvature = frame.curvature;
+  state.player.currentTorsion = frame.torsion;
+  state.player.progress = frame.progress;
+  state.player.nearestSample = frame.sample;
+  recordInvariantHistory(state, dt, config.maxHistorySeconds);
 }

@@ -11,9 +11,67 @@ body {
     sans-serif;
 }
 
+#app-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #02040a;
+}
+
+#app-shell.is-fullscreen-fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483600;
+  width: 100vw;
+  height: 100vh;
+}
+
 #game-canvas {
   display: block;
   width: 100vw;
   height: 100vh;
   touch-action: none;
+}
+
+.fullscreen-button {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  padding: 0;
+  color: rgba(218, 252, 255, 0.92);
+  background: #000000;
+  border: 1px solid rgba(54, 243, 255, 0.72);
+  border-radius: 6px;
+  box-shadow:
+    0 0 16px rgba(54, 243, 255, 0.28),
+    inset 0 0 12px rgba(54, 243, 255, 0.12);
+  cursor: pointer;
+}
+
+.fullscreen-button svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fullscreen-button:hover,
+.fullscreen-button:focus-visible,
+.fullscreen-button[aria-pressed="true"] {
+  color: #ffffff;
+  border-color: rgba(112, 255, 157, 0.85);
+  outline: none;
+  box-shadow:
+    0 0 18px rgba(112, 255, 157, 0.34),
+    inset 0 0 12px rgba(112, 255, 157, 0.14);
 }

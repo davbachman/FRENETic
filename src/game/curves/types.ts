@@ -2,11 +2,6 @@ import { Vector3 } from 'three';
 
 export type CurveFunction = (t: number) => Vector3;
 
-export interface LevelVisuals {
-  ringColor: string;
-  fogColor: string;
-}
-
 export interface LevelDefinition {
   id: string;
   name: string;
@@ -16,7 +11,6 @@ export interface LevelDefinition {
   acceptableCurvature: [number, number];
   acceptableTorsion: [number, number];
   curve: CurveFunction;
-  visual: LevelVisuals;
 }
 
 export interface CurveSample {
@@ -26,6 +20,7 @@ export interface CurveSample {
   tangent: Vector3;
   normal: Vector3;
   binormal: Vector3;
+  tangentDerivative?: Vector3;
   curvature: number;
   torsion: number;
   arcLength: number;

@@ -23,15 +23,16 @@ For the inset, screen coordinates are fixed: +T maps upward, +B maps rightward. 
 
 ## Main Tunnel View
 
-Add a small Three.js vector overlay group to the world scene, separate from the tunnel ring meshes. Each render frame:
+Draw `T'` and `N'` as 2D HUD-canvas vectors overlaid on the 3D tunnel view, not as Three.js world-space arrows. Each render frame:
 
-1. Sample a centerline frame a short arc-length distance ahead of the camera.
-2. Place both arrow bases at that frame position.
+1. Use the current camera/centerline frame as the source geometry.
+2. Place both 2D vector bases at the apparent tunnel centerline in the main view.
 3. Draw `T'` in blue and `N'` in orange from the same base.
-4. Clamp display lengths so extreme curvature or torsion cannot dominate the tunnel view.
-5. Use simple labels near the arrow tips: `T'` and `N'`.
+4. Project the world-space vectors into the current screen plane so they read like flat instrument vectors over the 3D scene.
+5. Clamp display lengths so extreme curvature or torsion cannot dominate the tunnel view.
+6. Use simple labels near the arrow tips: `T'` and `N'`.
 
-The arrows should be readable but not oversized. They should avoid changing thickness dramatically with value; magnitude should be expressed primarily through length.
+The arrows should be readable but not oversized. They should avoid changing thickness dramatically with value; magnitude should be expressed primarily through length. They should visually match the existing 2D HUD vector style.
 
 ## Bottom-Right Inset
 
@@ -62,6 +63,6 @@ Add focused tests before implementation:
 - Geometry helper tests for `N' = -kappa T + tau B`.
 - Inset projection tests showing the blue component on the T axis, green component on the B axis, and orange resultant.
 - Label/state tests proving the bottom-right panel is now the Tangent-Binormal plane.
-- Renderer tests proving the main-view vector group is updated from current simulation frame data and remains anchored to a centerline frame ahead of the camera.
+- HUD helper tests proving the main-view vector overlay is centered on the apparent tunnel centerline and remains length-clamped.
 
 Full verification after implementation should include `npm run typecheck`, `npm run test:run`, `npm run build`, and a browser/web-game screenshot check.

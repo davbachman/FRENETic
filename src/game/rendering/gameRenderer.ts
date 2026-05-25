@@ -14,23 +14,22 @@ import { Starfield } from './starfield';
 import { TunnelRings } from './tunnel';
 
 const SCREEN_UP = new Vector3(0, 0, 1);
+const CENTERLINE_LOOKAHEAD_FRACTION = 24;
 
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
+function wrap(index: number, length: number): number {
+  return ((index % length) + length) % length;
 }
 
 export function calculateCameraLookTarget(simulation: SimulationState): Vector3 {
   const { player } = simulation;
-  const forwardTarget = player.position.clone().add(player.tangent);
-  const centerlinePreview = player.nearestSample.position
-    .clone()
-    .add(player.nearestSample.tangent);
-  const distanceFromCenter = player.position.distanceTo(player.nearestSample.position);
-  const recoveryStart = simulation.sampled.level.tubeRadius * 0.45;
-  const recoveryWidth = Math.max(1e-6, simulation.sampled.level.tubeRadius * 1.25);
-  const recovery = clamp01((distanceFromCenter - recoveryStart) / recoveryWidth);
-
-  return forwardTarget.lerp(centerlinePreview, recovery);
+  const { samples } = simulation.sampled;
+  if (samples.length === 0) {
+    return player.position.clone().add(player.tangent);
+  }
+  const lookahead = Math.max(1, Math.floor(samples.length / CENTERLINE_LOOKAHEAD_FRACTION));
+  const previewSample =
+    samples[wrap(player.nearestSample.index + lookahead, samples.length)] ?? player.nearestSample;
+  return previewSample.position.clone();
 }
 
 export class GameRenderer implements RendererLike {

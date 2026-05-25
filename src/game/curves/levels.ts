@@ -29,49 +29,65 @@ function torusKnot(t: number, p: number, q: number, major = 6, minor = 2): Vecto
   );
 }
 
+function grannyKnot(t: number): Vector3 {
+  const u = TAU * t;
+  const scale = 0.1;
+  return new Vector3(
+    scale * (
+      -22 * Math.cos(u) -
+      128 * Math.sin(u) -
+      44 * Math.cos(3 * u) -
+      78 * Math.sin(3 * u)
+    ),
+    scale * (
+      -10 * Math.cos(2 * u) -
+      27 * Math.sin(2 * u) +
+      38 * Math.cos(4 * u) +
+      46 * Math.sin(4 * u)
+    ),
+    scale * (70 * Math.cos(3 * u) - 40 * Math.sin(3 * u)),
+  );
+}
+
 export const authoredLevels: LevelDefinition[] = [
   {
     id: 'planar-wave',
     name: 'Planar Wave',
-    speed: 7,
+    speed: 1.75,
     tubeRadius: 1.8,
     sampleCount: 720,
-    acceptableCurvature: [0.03, 0.42],
+    acceptableCurvature: [0, 0.5],
     acceptableTorsion: [-0.05, 0.05],
     curve: planarWave,
-    visual: { ringColor: '#36f3ff', fogColor: '#02040a' },
   },
   {
     id: 'lifted-wave',
     name: 'Lifted Wave',
-    speed: 7.4,
+    speed: 1.85,
     tubeRadius: 1.65,
     sampleCount: 840,
     acceptableCurvature: [0.04, 0.5],
     acceptableTorsion: [-0.28, 0.28],
     curve: liftedWave,
-    visual: { ringColor: '#57f5ff', fogColor: '#02040a' },
   },
   {
     id: 'trefoil-knot',
     name: 'Trefoil Knot',
-    speed: 7.8,
+    speed: 1.95,
     tubeRadius: 1.45,
     sampleCount: 960,
     acceptableCurvature: [0.06, 0.62],
     acceptableTorsion: [-0.46, 0.46],
     curve: (t) => torusKnot(t, 2, 3, 5.8, 2.1),
-    visual: { ringColor: '#7cfff0', fogColor: '#02040a' },
   },
   {
-    id: 'cinquefoil-knot',
-    name: 'Cinquefoil Knot',
-    speed: 8.2,
+    id: 'granny-knot',
+    name: 'Granny Knot',
+    speed: 2.6,
     tubeRadius: 1.25,
-    sampleCount: 1200,
-    acceptableCurvature: [0.08, 0.75],
-    acceptableTorsion: [-0.65, 0.65],
-    curve: (t) => torusKnot(t, 2, 5, 5.4, 2.0),
-    visual: { ringColor: '#9dffb0', fogColor: '#02040a' },
+    sampleCount: 1400,
+    acceptableCurvature: [0, 0.35],
+    acceptableTorsion: [-0.09, 0.09],
+    curve: grannyKnot,
   },
 ];
