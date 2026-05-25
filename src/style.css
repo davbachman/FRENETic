@@ -27,11 +27,23 @@ body {
   height: 100vh;
 }
 
-#game-canvas {
+#game-canvas,
+#hud-canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100vw;
   height: 100vh;
+}
+
+#game-canvas {
   touch-action: none;
+  z-index: 1;
+}
+
+#hud-canvas {
+  z-index: 2;
+  pointer-events: none;
 }
 
 .fullscreen-button {

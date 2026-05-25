@@ -1,10 +1,4 @@
 import {
-  CanvasTexture,
-  Mesh,
-  MeshBasicMaterial,
-  OrthographicCamera,
-  PlaneGeometry,
-  Scene,
   Vector3,
 } from 'three';
 import {
@@ -929,18 +923,9 @@ export function calculateMainViewDerivativeVectors(
 }
 
 export class HudOverlay {
-  readonly scene = new Scene();
-  readonly camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
-
-  private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
-  private readonly texture: CanvasTexture;
-  private readonly material: MeshBasicMaterial;
-  private readonly geometry = new PlaneGeometry(2, 2);
-  private readonly mesh: Mesh<PlaneGeometry, MeshBasicMaterial>;
 
-  constructor() {
-    this.canvas = document.createElement('canvas');
+  constructor(private readonly canvas: HTMLCanvasElement = document.createElement('canvas')) {
     const ctx = this.canvas.getContext('2d');
     if (ctx === null) {
       throw new Error('HUD overlay requires a 2D canvas context.');
@@ -949,15 +934,6 @@ export class HudOverlay {
     this.ctx = ctx;
     this.canvas.width = 1;
     this.canvas.height = 1;
-    this.texture = new CanvasTexture(this.canvas);
-    this.material = new MeshBasicMaterial({
-      map: this.texture,
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-    });
-    this.mesh = new Mesh(this.geometry, this.material);
-    this.scene.add(this.mesh);
   }
 
   resize(width: number, height: number): void {
@@ -978,14 +954,9 @@ export class HudOverlay {
     this.drawMinimap(simulation, layout);
     this.drawTangentBinormalPlane(game, simulation, layout);
     this.drawInvariantHistory(simulation, layout, width, height);
-    this.texture.needsUpdate = true;
   }
 
-  dispose(): void {
-    this.texture.dispose();
-    this.geometry.dispose();
-    this.material.dispose();
-  }
+  dispose(): void {}
 
   private traceAngularPanel(rect: Rect, bevel: number): void {
     const ctx = this.ctx;

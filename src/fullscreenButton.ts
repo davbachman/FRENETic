@@ -2,11 +2,13 @@ const FALLBACK_FULLSCREEN_CLASS = 'is-fullscreen-fallback';
 
 type FullscreenTarget = HTMLElement & {
   webkitRequestFullscreen?: () => Promise<void> | void;
+  webkitRequestFullScreen?: () => Promise<void> | void;
 };
 
 type OptionalFullscreenMethods = {
   requestFullscreen?: (options?: FullscreenOptions) => Promise<void> | void;
   webkitRequestFullscreen?: () => Promise<void> | void;
+  webkitRequestFullScreen?: () => Promise<void> | void;
 };
 
 type FullscreenDocument = Document & {
@@ -27,19 +29,37 @@ export function wireFullscreenButton(
   const fullscreenDoc = doc as FullscreenDocument;
   const fullscreenElement = (): Element | null =>
     doc.fullscreenElement ?? fullscreenDoc.webkitFullscreenElement ?? null;
-  const fullscreenRequestTarget = (): FullscreenTarget => {
-    const targetMethods = target as OptionalFullscreenMethods;
-    const root = doc.documentElement as (FullscreenTarget & OptionalFullscreenMethods) | null;
-    if (targetMethods.requestFullscreen || targetMethods.webkitRequestFullscreen) {
-      return target;
-    }
-    return root ?? target;
+
+  const fullscreenRequestTargets = (): FullscreenTarget[] => {
+    const root = doc.documentElement as FullscreenTarget | null;
+    const body = doc.body as FullscreenTarget | null;
+    const candidates = [target, root, body].filter(
+      (candidate): candidate is FullscreenTarget => candidate !== null && candidate !== undefined,
+    );
+    return candidates.filter((candidate, index) => candidates.indexOf(candidate) === index);
   };
+
+  const fullscreenRequestMethod = (
+    requestTarget: FullscreenTarget,
+  ): (() => Promise<void> | void) | undefined => {
+    const requestTargetMethods = requestTarget as OptionalFullscreenMethods;
+    if (requestTargetMethods.requestFullscreen) {
+      return () => requestTargetMethods.requestFullscreen?.call(requestTarget);
+    }
+    if (requestTargetMethods.webkitRequestFullscreen) {
+      return () => requestTargetMethods.webkitRequestFullscreen?.call(requestTarget);
+    }
+    if (requestTargetMethods.webkitRequestFullScreen) {
+      return () => requestTargetMethods.webkitRequestFullScreen?.call(requestTarget);
+    }
+    return undefined;
+  };
+
   const isFallbackFullscreen = (): boolean =>
     target.classList?.contains(FALLBACK_FULLSCREEN_CLASS) ?? false;
   const isNativeFullscreen = (): boolean => {
     const activeElement = fullscreenElement();
-    return activeElement === target || activeElement === fullscreenRequestTarget();
+    return activeElement !== null && fullscreenRequestTargets().includes(activeElement as FullscreenTarget);
   };
   const isActive = (): boolean => isNativeFullscreen() || isFallbackFullscreen();
   const syncPressed = (): void => {
@@ -49,13 +69,33 @@ export function wireFullscreenButton(
     syncPressed();
     options.onFullscreenChange?.();
   };
-  const requestFullscreen = (): Promise<void> | void => {
-    const requestTarget = fullscreenRequestTarget();
-    const requestTargetMethods = requestTarget as OptionalFullscreenMethods;
-    if (requestTargetMethods.requestFullscreen) {
-      return requestTargetMethods.requestFullscreen.call(requestTarget, { navigationUI: 'hide' });
+  const requestFullscreen = (): Promise<void> | undefined => {
+    const candidates = fullscreenRequestTargets().filter((candidate) =>
+      Boolean(fullscreenRequestMethod(candidate)),
+    );
+    if (candidates.length === 0) {
+      return undefined;
     }
-    return requestTargetMethods.webkitRequestFullscreen?.call(requestTarget);
+    const tryCandidate = (index: number, previousError?: unknown): Promise<void> => {
+      const candidate = candidates[index];
+      if (!candidate) {
+        return Promise.reject(previousError ?? new Error('Fullscreen API unavailable.'));
+      }
+      const request = fullscreenRequestMethod(candidate);
+      if (!request) {
+        return tryCandidate(index + 1, previousError);
+      }
+
+      try {
+        return Promise.resolve(request()).catch((error: unknown) =>
+          tryCandidate(index + 1, error),
+        );
+      } catch (error) {
+        return tryCandidate(index + 1, error);
+      }
+    };
+
+    return tryCandidate(0);
   };
   const exitFullscreen = (): Promise<void> | void => {
     if (doc.exitFullscreen) {

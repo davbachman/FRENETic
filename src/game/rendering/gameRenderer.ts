@@ -38,13 +38,14 @@ export class GameRenderer implements RendererLike {
   private readonly camera = new PerspectiveCamera(74, 1, 0.03, 180);
   private readonly starfield = new Starfield();
   private readonly tunnel = new TunnelRings();
-  private readonly hud = new HudOverlay();
+  private readonly hud: HudOverlay;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, hudCanvas: HTMLCanvasElement) {
     this.renderer = new WebGLRenderer({ canvas, antialias: true });
     this.renderer.autoClear = false;
     this.renderer.setClearColor(hudColors.background, 1);
     this.renderer.setPixelRatio(Math.min(2, typeof window === 'undefined' ? 1 : window.devicePixelRatio));
+    this.hud = new HudOverlay(hudCanvas);
 
     this.scene.add(new AmbientLight(0xffffff, 1.15));
     this.scene.add(this.starfield.points);
@@ -67,11 +68,9 @@ export class GameRenderer implements RendererLike {
     this.camera.up.copy(SCREEN_UP);
     this.camera.lookAt(calculateCameraLookTarget(simulation));
 
-    this.hud.draw(game, simulation);
     this.renderer.clear();
     this.renderer.render(this.scene, this.camera);
-    this.renderer.clearDepth();
-    this.renderer.render(this.hud.scene, this.hud.camera);
+    this.hud.draw(game, simulation);
   }
 
   dispose(): void {

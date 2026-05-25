@@ -28,7 +28,7 @@ function classListStub(): DOMTokenList {
 }
 
 describe('fullscreen button', () => {
-  it('requests fullscreen on the app shell when inactive', () => {
+  it('requests fullscreen on the app shell without Chrome-sensitive options when inactive', () => {
     const button = buttonElement() as HTMLButtonElement & { dispatch(type: string): void };
     const target = {
       requestFullscreen: vi.fn().mockResolvedValue(undefined),
@@ -47,9 +47,36 @@ describe('fullscreen button', () => {
     wireFullscreenButton(button, target, doc);
     button.dispatch('click');
 
-    expect(target.requestFullscreen).toHaveBeenCalledWith({ navigationUI: 'hide' });
+    expect(target.requestFullscreen).toHaveBeenCalledWith();
     expect(fullscreenRoot.requestFullscreen).not.toHaveBeenCalled();
     expect(doc.exitFullscreen).not.toHaveBeenCalled();
+  });
+
+  it('tries the document root if the app shell request is rejected', async () => {
+    const button = buttonElement() as HTMLButtonElement & { dispatch(type: string): void };
+    const rejectedRequest = Promise.reject(new Error('shell rejected'));
+    rejectedRequest.catch(() => {});
+    const target = {
+      requestFullscreen: vi.fn().mockReturnValue(rejectedRequest),
+    } as unknown as HTMLElement;
+    const fullscreenRoot = {
+      requestFullscreen: vi.fn().mockResolvedValue(undefined),
+    } as unknown as HTMLElement;
+    const doc = {
+      documentElement: fullscreenRoot,
+      fullscreenElement: null,
+      exitFullscreen: vi.fn().mockResolvedValue(undefined),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as Document;
+
+    wireFullscreenButton(button, target, doc);
+    button.dispatch('click');
+    await rejectedRequest.catch(() => {});
+    await Promise.resolve();
+
+    expect(target.requestFullscreen).toHaveBeenCalledWith();
+    expect(fullscreenRoot.requestFullscreen).toHaveBeenCalledWith();
   });
 
   it('falls back to the document root when the app shell cannot request fullscreen', () => {
@@ -69,7 +96,7 @@ describe('fullscreen button', () => {
     wireFullscreenButton(button, target, doc);
     button.dispatch('click');
 
-    expect(fullscreenRoot.requestFullscreen).toHaveBeenCalledWith({ navigationUI: 'hide' });
+    expect(fullscreenRoot.requestFullscreen).toHaveBeenCalledWith();
   });
 
   it('runs the fullscreen change callback when Chrome changes fullscreen state', () => {

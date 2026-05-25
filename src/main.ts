@@ -11,11 +11,16 @@ declare global {
 }
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas');
+const hudCanvas = document.querySelector<HTMLCanvasElement>('#hud-canvas');
 const shell = document.querySelector<HTMLElement>('#app-shell');
 const fullscreenButton = document.querySelector<HTMLButtonElement>('#fullscreen-button');
 
 if (!canvas) {
   throw new Error('FRENETic requires a #game-canvas element.');
+}
+
+if (!hudCanvas) {
+  throw new Error('FRENETic requires a #hud-canvas element.');
 }
 
 if (!shell) {
@@ -26,7 +31,7 @@ if (!fullscreenButton) {
   throw new Error('FRENETic requires a #fullscreen-button element.');
 }
 
-const app = new FreneticApp(canvas, new GameRenderer(canvas));
+const app = new FreneticApp(canvas, new GameRenderer(canvas, hudCanvas));
 wireFullscreenButton(fullscreenButton, shell, document, {
   onFullscreenChange: () => {
     app.resize();
