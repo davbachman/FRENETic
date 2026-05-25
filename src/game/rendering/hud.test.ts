@@ -20,7 +20,9 @@ import {
   calculateInvariantHistoryPanel,
   calculateInvariantSymbolStyle,
   calculateMinimapStrokeSegments,
+  calculateMinimapTangentVector,
   calculateMainViewDerivativeVectors,
+  calculateMainViewDerivativeVectorLabelOptions,
   calculateMainViewDerivativeVectorStyle,
   calculateMinimapProjection,
   calculateRadarHudRect,
@@ -80,6 +82,13 @@ describe('HUD overlay helpers', () => {
       normalDerivativeColor: hudColors.green,
     });
     expect(calculateTangentBinormalPlaneVectorStyle().normalDerivativeColor).toBe('#ffffff');
+  });
+
+  it('uses larger labels for the main tunnel-view derivative vectors', () => {
+    const options = calculateMainViewDerivativeVectorLabelOptions();
+
+    expect(options.fontSize).toBe(16);
+    expect(options.distance).toBeGreaterThan(8);
   });
 
   it('uses a plain farther-out N prime label in the tangent-binormal inset', () => {
@@ -567,6 +576,41 @@ describe('HUD overlay helpers', () => {
     expect(Math.max(...alphas) - Math.min(...alphas)).toBeGreaterThanOrEqual(0.5);
     expect(segments[2].alpha).toBeGreaterThan(segments[0].alpha);
     expect(formatMinimapStrokeColor(segments[2].alpha)).toBe('rgba(255, 159, 47, 0.900)');
+  });
+
+  it('projects a fixed-length white tangent vector from the current minimap dot', () => {
+    const current = {
+      ...sample(0, 0, 0),
+      tangent: new Vector3(0, 1, 3),
+    };
+    const rect = { x: 0, y: 0, width: 200, height: 160 };
+    const base = { x: 100, y: 100 };
+
+    const vector = calculateMinimapTangentVector(base, current, rect);
+
+    expect(vector.start).toEqual(base);
+    expect(vector.end.x).toBeCloseTo(base.x);
+    expect(vector.end.y).toBeLessThan(base.y);
+    expect(Math.hypot(vector.end.x - base.x, vector.end.y - base.y)).toBeCloseTo(19.2);
+    expect(vector.color).toBe('#ffffff');
+    expect(vector.label).toBe('T');
+    expect(vector.labelVisible).toBe(true);
+    expect(vector.labelPosition.y).toBeLessThan(vector.end.y);
+  });
+
+  it('hides the minimap tangent label when it would leave the panel bounds', () => {
+    const current = {
+      ...sample(0, 0, 0),
+      tangent: new Vector3(1, 0, 0),
+    };
+    const rect = { x: 0, y: 0, width: 200, height: 160 };
+    const base = { x: 184, y: 80 };
+
+    const vector = calculateMinimapTangentVector(base, current, rect);
+
+    expect(vector.end.x).toBeGreaterThan(base.x);
+    expect(vector.labelPosition.x).toBeGreaterThan(rect.x + rect.width);
+    expect(vector.labelVisible).toBe(false);
   });
 
   it('maps N prime and its projections into the tangent-binormal plane', () => {

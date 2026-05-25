@@ -90,6 +90,13 @@ interface MinimapStrokeSegment {
   shadowBlur: number;
 }
 
+interface MinimapTangentVector extends RadarVector {
+  label: 'T';
+  labelPosition: MinimapPoint;
+  labelVisible: boolean;
+  color: string;
+}
+
 interface HudLayout {
   curvatureMeter: Rect;
   torsionMeter: Rect;
@@ -148,6 +155,7 @@ interface DerivativeVectorStyle {
 interface VectorLabelOptions {
   distance: number;
   shadowBlur: number;
+  fontSize?: number;
 }
 
 const TEXT_DIM = 'rgba(180, 232, 238, 0.64)';
@@ -167,6 +175,9 @@ const TORSION_HISTORY_RAIL_MARGIN = 20;
 const BOTTOM_BRIDGE_SHOULDER_X = 0.28;
 const BOTTOM_BRIDGE_THROAT_TOP = 0.37;
 const BOTTOM_BRIDGE_THROAT_BOTTOM = 0.63;
+const MINIMAP_TANGENT_LABEL_WIDTH = 7;
+const MINIMAP_TANGENT_LABEL_HEIGHT = 10;
+const MINIMAP_TANGENT_LABEL_INSET = 4;
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -200,6 +211,14 @@ export function calculateMainViewDerivativeVectorStyle(): DerivativeVectorStyle 
   return {
     tangentDerivativeColor: hudColors.blue,
     normalDerivativeColor: hudColors.green,
+  };
+}
+
+export function calculateMainViewDerivativeVectorLabelOptions(): VectorLabelOptions {
+  return {
+    distance: 12,
+    shadowBlur: 7,
+    fontSize: 16,
   };
 }
 
@@ -770,6 +789,41 @@ export function calculateMinimapStrokeSegments(points: MinimapProjectionPoint[])
 
 export function formatMinimapStrokeColor(alpha: number): string {
   return `rgba(${hudColors.orangeRgb}, ${clamp01(alpha).toFixed(3)})`;
+}
+
+export function calculateMinimapTangentVector(
+  start: MinimapPoint,
+  sample: Pick<CurveSample, 'tangent'>,
+  rect: Rect,
+): MinimapTangentVector {
+  const projected = {
+    x: sample.tangent.x,
+    y: -sample.tangent.y,
+  };
+  const projectedLength = Math.hypot(projected.x, projected.y);
+  const direction = projectedLength > 1e-6
+    ? { x: projected.x / projectedLength, y: projected.y / projectedLength }
+    : { x: 1, y: 0 };
+  const length = Math.min(26, Math.max(18, Math.min(rect.width, rect.height) * 0.12));
+  const end = {
+    x: start.x + direction.x * length,
+    y: start.y + direction.y * length,
+  };
+  const labelPosition = calculateVectorLabelPosition(start, end, 8);
+  const labelVisible =
+    labelPosition.x >= rect.x + MINIMAP_TANGENT_LABEL_INSET &&
+    labelPosition.x + MINIMAP_TANGENT_LABEL_WIDTH <= rect.x + rect.width - MINIMAP_TANGENT_LABEL_INSET &&
+    labelPosition.y - MINIMAP_TANGENT_LABEL_HEIGHT >= rect.y + MINIMAP_TANGENT_LABEL_INSET &&
+    labelPosition.y <= rect.y + rect.height - MINIMAP_TANGENT_LABEL_INSET;
+
+  return {
+    start,
+    end,
+    label: 'T',
+    labelPosition,
+    labelVisible,
+    color: '#ffffff',
+  };
 }
 
 function normalizedOr(vector: Vector3, fallback: Vector3): Vector3 {
@@ -1370,6 +1424,16 @@ export class HudOverlay {
 
     this.drawMinimapBrightnessCurve(projection.points);
 
+    const tangentVector = calculateMinimapTangentVector(projection.nearest, simulation.player, rect);
+    this.drawVector(
+      tangentVector.start,
+      tangentVector.end,
+      tangentVector.color,
+      2,
+      tangentVector.labelVisible ? tangentVector.label : undefined,
+      { distance: 8, shadowBlur: 0 },
+    );
+
     ctx.fillStyle = '#ffffff';
     ctx.shadowColor = '#ffffff';
     ctx.shadowBlur = 12;
@@ -1453,6 +1517,7 @@ export class HudOverlay {
     );
     const vectors = calculateMainViewDerivativeVectors(readoutSample, width, height, curvatureMax, torsionMax);
     const style = calculateMainViewDerivativeVectorStyle();
+    const labelOptions = calculateMainViewDerivativeVectorLabelOptions();
 
     this.drawVector(
       vectors.tangentDerivative.start,
@@ -1460,6 +1525,7 @@ export class HudOverlay {
       style.tangentDerivativeColor ?? hudColors.blue,
       4,
       "T'",
+      labelOptions,
     );
     this.drawVector(
       vectors.normalDerivative.start,
@@ -1467,6 +1533,7 @@ export class HudOverlay {
       style.normalDerivativeColor,
       4,
       "N'",
+      labelOptions,
     );
   }
 
@@ -1616,7 +1683,7 @@ export class HudOverlay {
     ctx.fill();
     if (label) {
       ctx.shadowBlur = labelOptions.shadowBlur;
-      ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.font = `${labelOptions.fontSize ?? 10}px ui-monospace, SFMono-Regular, Menlo, monospace`;
       const labelPosition = calculateVectorLabelPosition(start, end, labelOptions.distance);
       ctx.fillText(label, labelPosition.x, labelPosition.y);
     }
